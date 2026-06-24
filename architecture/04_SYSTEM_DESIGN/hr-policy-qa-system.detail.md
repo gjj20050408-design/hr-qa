@@ -137,6 +137,19 @@ class EmbeddingStatus(str, Enum):
     PROCESSING = "processing"   # 处理中
     COMPLETED = "completed"     # 已完成
     FAILED = "failed"           # 失败
+
+class SensitivityLevel(str, Enum):
+    """个人数据字段敏感度级别（二期新增）"""
+    PUBLIC = "public"           # 全员可见
+    DEPARTMENT = "department"   # 部门内可见
+    PRIVATE = "private"         # 绝对私密
+
+class QueryType(str, Enum):
+    """RAG查询类型（二期新增，LLM意图提取结果）"""
+    POLICY_ONLY = "policy_only"       # 仅涉及制度政策
+    PERSONAL_DATA = "personal_data"   # 明确涉及个人数据
+    MIXED = "mixed"                   # 同时涉及制度和数据
+    AGGREGATION = "aggregation"       # 聚合/统计查询
 ```
 
 ### 1.5 权限矩阵（配置表）
@@ -465,6 +478,9 @@ class QAContext:
     reference_docs: list = field(default_factory=list)
     confidence: Optional[float] = None
     filtered_doc_ids: list = field(default_factory=list)  # 被权限过滤的文档ID
+    personal_data_extraction: Optional[dict] = None  # ★二期 LLM意图提取结果
+    personal_data_allowed: list = field(default_factory=list)  # ★二期 授权的个人数据字段
+    personal_data_denied: list = field(default_factory=list)  # ★二期 被拒的个人数据字段
     is_done: bool = False  # 短路标志
 
 class QAHandler(ABC):
@@ -648,6 +664,149 @@ class FallbackHandler(QAHandler):
                 ctx.answer_type = AnswerType.NO_RESULT
             ctx.is_done = True
         return ctx
+
+
+class PersonalDataGuard(QAHandler):
+    """⑧（二期新增）个人数据守卫处理器。
+    在RAG检索之前拦截，执行LLM意图提取 + 三级敏感度校验。
+    本处理器不短路常规策略链（FAQ/规则/搜索），仅在RAG阶段介入。"""
+
+    def __init__(self, llm_provider: LLMProvider):
+        super().__init__()
+        self.llm = llm_provider
+
+    async def handle(self, ctx: QAContext, db_session) -> QAContext:
+        """执行个人数据访问审核。用于RAG流程的前置检查。"""
+        # 1. LLM意图提取
+        extraction = await self._extract_intent(
+            ctx.question, ctx.user_id, ctx.user_role, ctx.user_context
+        )
+        ctx.personal_data_extraction = extraction
+
+        if extraction["confidence"] < 0.7:
+            ctx.answer = "🔒 抱歉，无法确认您在查询哪位员工的信息。请使用明确姓名后重试，例如「张三的工龄是多少」。如需查询自己，请使用「我的…」句式。"
+            ctx.answer_type = AnswerType.NO_RESULT
+            ctx.is_done = True
+            return ctx
+
+        if extraction["query_type"] == "aggregation":
+            ctx.answer = "🔒 抱歉，出于数据安全考虑，系统不支持聚合统计类查询（如平均值、排名、人数统计等）。如有业务需要，请联系HR部门。"
+            ctx.answer_type = AnswerType.NO_RESULT
+            ctx.is_done = True
+            return ctx
+
+        if extraction["query_type"] == "policy_only":
+            # 纯制度查询，跳过个人数据审核
+            return await self.handle_next(ctx, db_session)
+
+        # 2. 个人数据/混合查询 → 逐字段校验
+        allowed, denied = await self._check_fields(
+            ctx.user_id, ctx.user_role, extraction, db_session
+        )
+        ctx.personal_data_allowed = allowed
+        ctx.personal_data_denied = denied
+
+        if not allowed:
+            # 全部被拒
+            target_names = "、".join(extraction["target_persons"])
+            field_names = "、".join(extraction["requested_fields"])
+            ctx.answer = (
+                f"🔒 抱歉，您无权查询{target_names}的{field_names}等个人私密信息。"
+                f"如需了解自己的权益，请尝试询问「我的{field_names}是多少」。"
+            )
+            ctx.answer_type = AnswerType.NO_RESULT
+            ctx.is_done = True
+            return ctx
+
+        # 部分或全部放行 → 继续链
+        return await self.handle_next(ctx, db_session)
+
+    async def _extract_intent(
+        self, question: str, user_id: str, role: Role, user_context: dict
+    ) -> dict:
+        """调用LLM进行意图提取（轻量级调用，非完整生成）。
+        使用独立的System Prompt，与User Prompt严格分离防注入。"""
+        system_prompt = (
+            "你是一个HR数据查询分析器。你的任务是从用户问题中提取查询意图，而不是回答问题。\n"
+            f"当前登录用户信息：姓名={user_context.get('name')}、工号={user_context.get('employee_id')}、"
+            f"部门={user_context.get('department')}、角色={role}\n\n"
+            "分析规则：\n"
+            "1. 第一人称「我」「我的」→ 目标人物为当前用户\n"
+            "2. 明确人名（非当前用户）→ 目标人物为提及的人名\n"
+            "3. 聚合/统计类（平均/最高/最低/总共/多少人/哪些人）→ aggregation\n"
+            "4. 纯政策问题（无个人数据字段请求）→ policy_only\n"
+            "5. 无法确定目标人物时confidence应低于0.7\n\n"
+            '输出JSON格式（不要输出其他内容）：\n'
+            '{"query_type":"...", "target_persons":["..."], "requested_fields":["..."], '
+            '"is_self_query":true|false, "confidence":0.0~1.0}'
+        )
+        response = await self.llm.generate(
+            prompt=question,
+            system_prompt=system_prompt,
+            max_tokens=200,
+            temperature=0.0,
+        )
+        import json
+        return json.loads(response.content)
+
+    async def _check_fields(
+        self, querier_id: str, querier_role: Role,
+        extraction: dict, db_session
+    ) -> tuple[list, list]:
+        """逐字段校验三级敏感度权限。"""
+        allowed, denied = [], []
+
+        if querier_role in (Role.HR_SPECIALIST, Role.ADMIN):
+            # HR/管理员 → 全部放行
+            for person in extraction["target_persons"]:
+                for field in extraction["requested_fields"]:
+                    allowed.append({"person": person, "field": field})
+            return allowed, denied
+
+        # 查询自己的数据 → 全部放行
+        if extraction["is_self_query"]:
+            for field in extraction["requested_fields"]:
+                allowed.append({"person": extraction["target_persons"][0], "field": field})
+            return allowed, denied
+
+        # 查询他人 → 按敏感度逐字段判定
+        for person_name in extraction["target_persons"]:
+            # 查找目标用户
+            target = await db_session.execute(
+                select(User).where(User.name == person_name)
+            )
+            target = target.scalar_one_or_none()
+            if not target:
+                denied.append({"person": person_name, "field": "ALL", "reason": "target_not_found"})
+                continue
+
+            # 加载当前用户的部门信息
+            querier = await db_session.get(User, querier_id)
+
+            for field_label in extraction["requested_fields"]:
+                # 查询敏感度配置
+                sens = await db_session.execute(
+                    select(EmployeeDataSensitivity).where(
+                        EmployeeDataSensitivity.field_label == field_label,
+                        EmployeeDataSensitivity.is_active == True,
+                    )
+                )
+                sens = sens.scalar_one_or_none()
+                if not sens:
+                    denied.append({"person": person_name, "field": field_label, "reason": "unknown_field"})
+                    continue
+
+                if sens.sensitivity_level == SensitivityLevel.PUBLIC:
+                    allowed.append({"person": person_name, "field": field_label})
+                elif sens.sensitivity_level == SensitivityLevel.DEPARTMENT:
+                    if querier.department_id == target.department_id:
+                        allowed.append({"person": person_name, "field": field_label})
+                    else:
+                        denied.append({"person": person_name, "field": field_label, "reason": "cross_department"})
+                else:  # PRIVATE
+                    denied.append({"person": person_name, "field": field_label, "reason": "private"})
+
+        return allowed, denied
 ```
 
 ### 2.4 问答编排器
@@ -667,7 +826,7 @@ class QAOrchestrator:
     def build_chain(self) -> QAHandler:
         """构建策略链。
         一期: FAQ → 规则 → 权限过滤 → 搜索 → 兜底
-        二期: FAQ → 规则 → 权限过滤 → 搜索 → RAG → 兜底"""
+        二期: FAQ → 规则 → 权限过滤 → 搜索 → 个人数据守卫 → RAG → 兜底"""
         faq = FAQMatcher()
         rule = RuleMatcher()
         perm_filter = PermissionFilter()
@@ -679,9 +838,12 @@ class QAOrchestrator:
         perm_filter.set_next(search)
 
         if self.phase == "phase2":
+            # ★ V1.1: 在搜索和RAG之间插入个人数据守卫
+            guard = PersonalDataGuard(self.llm_provider)
             from app.services.rag_handler import RAGHandler
             rag = RAGHandler()
-            search.set_next(rag)
+            search.set_next(guard)
+            guard.set_next(rag)
             rag.set_next(fallback)
         else:
             search.set_next(fallback)

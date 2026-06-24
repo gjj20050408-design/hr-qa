@@ -243,12 +243,13 @@ C4Container
 | **问答编排器** | 策略链编排、多轮会话管理 | FastAPI + Redis | `POST /qa/ask`、`POST /qa/sessions` |
 | **RAG引擎（二期）** | 向量检索、Prompt构建、LLM调用 | FastAPI + ChromaDB + OpenAI SDK | `POST /qa/rag-ask`（内部接口） |
 | **权限过滤器** | 搜索和RAG的横切访问控制 | FastAPI中间件 | 仅内部使用 |
+| **个人数据守卫（二期）** | LLM意图提取、三级敏感度校验、聚合查询拦截 | FastAPI + LLM API + employee_data_sensitivity表 | `POST /qa/intent-extract`（内部接口） |
 | **反馈服务** | 答案反馈收集、纠错申请流程 | FastAPI | `POST /feedback`、`POST /corrections` |
 | **通知服务** | 公告增删改查、定向推送、阅读追踪 | FastAPI + Celery（邮件） | `POST /announcements`、`GET /announcements/{id}/reads` |
 | **分析服务** | 问答统计、热点分析、分类分布 | FastAPI + Redis缓存 | `GET /analytics/dashboard`、`GET /analytics/hotspots` |
 | **审计服务** | 全量操作日志、不可变存储 | FastAPI（中间件） | `GET /audit/logs`（仅管理员） |
 
-### 4.4 问答策略链（核心编排）
+### 4.4 问答策略链（核心编排 — V1.1 含双重权限）
 
 ```mermaid
 flowchart TD
@@ -257,22 +258,28 @@ flowchart TD
     C -->|命中| D[返回FAQ答案]
     C -->|未命中| E{③ 规则匹配<br/>正则/关键词模板}
     E -->|命中| F[返回规则答案]
-    E -->|未命中| G[④ 权限过滤器<br/>canAccess 文档, 用户角色]
+    E -->|未命中| G[④ 权限过滤器<br/>文档检索权限 canAccess]
     G --> H[⑤ 全文搜索<br/>MySQL FULLTEXT + Ngram]
     H -->|有结果| I[返回搜索结果<br/>含高亮摘要片段]
     H -->|无结果| J{⑥ RAG槽位<br/>一期：跳过<br/>二期：激活}
-    J -->|二期| K[向量检索 Top-10]
-    K --> L[权限过滤]
-    L -->|全部过滤| M[返回权限拒绝提示]
-    L -->|部分可用| N[构建Prompt Top-5]
-    N --> O[LLM生成回答]
-    O --> P[返回回答 + 出处引用]
-    J -->|一期跳过 / 无结果| Q[⑦ 兜底回复<br/>"未找到相关制度<br/>建议联系HR部门"]
+    J -->|二期| K[个人数据守卫<br/>LLM意图提取]
+    K -->|aggregation| K1[直接拒绝聚合查询]
+    K -->|personal_data/mixed| L[敏感度逐字段校验<br/>public/dept/private三级]
+    L -->|全部被拒| L1[返回个人数据拒绝提示]
+    L -->|部分/全部放行| M[⑦ 向量检索 Top-10]
+    M --> N[⑧ 权限过滤器<br/>文档 access_level 过滤]
+    N -->|全部过滤| N1[返回文档权限拒绝提示]
+    N -->|部分可用| O[构建 Prompt<br/>授权文档片段 + 授权个人数据]
+    O --> P[LLM生成回答]
+    P --> Q[返回回答 + 出处引用<br/>+ 过滤提示(如有)]
+    J -->|一期跳过 / 无结果| R[⑨ 兜底回复<br/>"未找到相关制度<br/>建议联系HR部门"]
 
     style G fill:#ffe1e1
-    style L fill:#ffe1e1
+    style N fill:#ffe1e1
+    style K fill:#e1e1ff
+    style L fill:#e1e1ff
     style J fill:#e1e1ff
-    style Q fill:#fff4e1
+    style R fill:#fff4e1
 ```
 
 ### 4.5 核心数据流：问答全链路
@@ -333,6 +340,47 @@ flowchart TD
     P -->|否| R[正常返回]
 ```
 
+### 4.7 个人数据访问控制流程（二期 — PersonalDataGuard）
+
+```mermaid
+flowchart TD
+    A[用户提问] --> B[① LLM意图提取<br/>System Prompt + User Prompt分离]
+    B --> C{confidence ≥ 0.7?}
+    C -->|否| D[🔒 保守拒绝<br/>"无法确认查询对象"]
+    C -->|是| E{query_type?}
+    E -->|policy_only| F[✅ 跳过个人数据审核<br/>进入文档检索]
+    E -->|aggregation| G[🔒 直接拒绝<br/>"不支持聚合统计查询"]
+    E -->|personal_data / mixed| H{② 查询者角色?}
+    H -->|HR / admin| F
+    H -->|employee| I{查询者 == 目标人物?<br/>is_self_query}
+    I -->|是 本人| F
+    I -->|否 他人| J[③ 逐字段敏感度校验]
+    J --> K{字段敏感度?}
+    K -->|public| L[✅ 放行]
+    K -->|department| M{同部门?}
+    M -->|是| L
+    M -->|否| N[❌ 拒绝]
+    K -->|private| N
+    L --> O{全部字段判定完毕?}
+    N --> O
+    O --> P{结果汇总}
+    P -->|全部被拒| Q[🔒 返回拒绝提示<br/>引导查询自己数据]
+    P -->|部分被拒| R2[标记被拒字段<br/>仅用授权字段继续]
+    P -->|全部放行| S[✅ 携带授权个人数据<br/>进入文档检索+LLM生成]
+```
+
+**三级敏感度权限矩阵**：
+
+| 查询者 | 目标人物 | 字段敏感度 | 同部门? | 结果 |
+|:------:|:--------:|:----------:|:------:|:----:|
+| employee | 自己 | public / dept / private | — | ✅ |
+| employee | 他人 | public | — | ✅ |
+| employee | 他人 | department | 是 | ✅ |
+| employee | 他人 | department | 否 | ❌ |
+| employee | 他人 | private | — | ❌ |
+| hr_specialist | 任意 | 任意 | — | ✅ |
+| admin | 任意 | 任意 | — | ✅ |
+
 ---
 
 ## 5. 接口设计
@@ -356,6 +404,9 @@ flowchart TD
 | `get_dashboard_stats(time_range)` | FR-9.1 | 角色=hr_specialist\|admin | ~500ms | 按类型/日期/分类聚合qa_records；计算指标；返回图表数据 | [§3.13](./detail.md) |
 | `set_category_access(category_id, access_level, cascade?)` | FR-2.6(RAG) | 角色=hr_specialist\|admin | ~100ms | 更新category.access_level；若cascade→批量更新继承文档；审计日志 | [§3.14](./detail.md) |
 | `set_document_access(document_id, access_level)` | FR-2.7(RAG) | 角色=hr_specialist\|admin；级别≤自身角色 | ~50ms | 更新doc.access_level；标记覆盖指示；审计日志 | [§3.15](./detail.md) |
+| `extract_intent(question, user_context)` | FR-10.3(PDATA) | RAG流程中、文档检索之前 | ~500ms LLM调用 | LLM返回{query_type, target_persons, requested_fields, is_self_query, confidence} | [§3.16](./detail.md) |
+| `check_personal_data_access(querier, target, fields)` | FR-10.3(PDATA) | LLM意图提取成功 | ~50ms DB查询 | 逐字段校验三级敏感度；返回{allowed, denied} | [§3.17](./detail.md) |
+| `update_sensitivity_config(field_name, new_level)` | FR-10.1(PDATA) | 角色=admin；需二次确认 | ~50ms | 更新employee_data_sensitivity表；触发相关RAG缓存失效；审计日志 | [§3.18](./detail.md) |
 
 ### 5.2 跨系统接口协议
 
@@ -641,6 +692,19 @@ class AuditLog:
     ip_address: Optional[str]
     user_agent: Optional[str]
     created_at: datetime
+
+@dataclass
+class EmployeeDataSensitivity:
+    """员工数据字段敏感度配置（二期新增）"""
+    field_id: int                     # 自增主键
+    field_name: str                   # 字段英文名，如 salary、work_years
+    field_label: str                  # 字段中文名，如「工资」「工龄」
+    sensitivity_level: SensitivityLevel  # public | department | private
+    source_table: str                 # 数据源表，如 users、employee_salaries
+    source_column: str                # 数据源列，如 salary、hire_date
+    is_active: bool = True            # 是否启用
+    created_at: datetime
+    updated_at: datetime
 ```
 
 > *（完整方法实现 → [L1 §2](./hr-policy-qa-system.detail.md) · 配置常量字典 → [L1 §1](./hr-policy-qa-system.detail.md)）*
