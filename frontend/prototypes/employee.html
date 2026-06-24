@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>员工端 - HR制度智能问答系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'] },
+          colors: {
+            primary: { DEFAULT: '#0F172A', light: '#1E293B', hover: '#334155' },
+            accent: { DEFAULT: '#0369A1', light: '#0284C7', hover: '#075985' },
+            surface: { DEFAULT: '#F8FAFC', card: '#FFFFFF', muted: '#F1F5F9' },
+            border: { DEFAULT: '#E2E8F0', light: '#F1F5F9' },
+            success: '#10B981', warning: '#F59E0B', danger: '#EF4444',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif; }
+    .sidebar-link { @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150; }
+    .sidebar-link.active { @apply bg-accent text-white shadow-md shadow-accent/20; }
+    .sidebar-link:not(.active) { @apply text-slate-600 hover:bg-surface-muted hover:text-slate-900; }
+    .glass-card { @apply bg-white/90 backdrop-blur-sm border border-border rounded-xl shadow-sm; }
+    .search-highlight { background: linear-gradient(transparent 60%, #FDE68A 60%); }
+    .chat-bubble-user { @apply bg-accent text-white rounded-2xl rounded-br-md; }
+    .chat-bubble-ai { @apply bg-surface-muted text-slate-800 rounded-2xl rounded-bl-md; }
+    .scrollbar-thin::-webkit-scrollbar { width: 5px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+  </style>
+</head>
+<body class="bg-surface h-screen flex flex-col overflow-hidden">
+
+  <!-- 顶部导航 -->
+  <header class="bg-white border-b border-border flex-shrink-0 z-30">
+    <div class="flex items-center justify-between h-14 px-6">
+      <div class="flex items-center gap-4">
+        <div class="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <span class="font-semibold text-primary text-sm hidden sm:inline">HR制度智能问答</span>
+        <!-- 页面切换 Tab -->
+        <nav class="flex ml-6 gap-1">
+          <button class="px-3 py-1.5 text-xs font-medium rounded-md bg-accent text-white" onclick="switchView('search')">制度搜索</button>
+          <button class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:bg-surface-muted" onclick="switchView('chat')">AI问答</button>
+          <button class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:bg-surface-muted" onclick="switchView('faq')">常见问题</button>
+          <button class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:bg-surface-muted" onclick="switchView('notifications')">通知消息</button>
+          <button class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:bg-surface-muted" onclick="switchView('history')">问答历史</button>
+          <button class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:bg-surface-muted" onclick="switchView('favorites')">我的收藏</button>
+        </nav>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="relative p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-surface-muted transition-colors" onclick="switchView('notifications')">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+          <span class="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full"></span>
+        </button>
+        <div class="flex items-center gap-2 pl-3 border-l border-border">
+          <div class="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-semibold">张</div>
+          <div class="hidden sm:block">
+            <p class="text-sm font-medium text-slate-700">张三</p>
+            <p class="text-xs text-slate-400">普通员工</p>
+          </div>
+          <button class="p-1 text-slate-400 hover:text-slate-600">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主内容区 -->
+  <main class="flex-1 flex overflow-hidden">
+
+    <!-- 视图1：制度搜索 -->
+    <div id="searchView" class="flex flex-1 overflow-hidden">
+      <aside class="w-full md:w-80 lg:w-96 border-r border-border bg-white flex flex-col flex-shrink-0">
+        <div class="p-4 border-b border-border">
+          <h2 class="text-lg font-semibold text-primary mb-4">制度搜索</h2>
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="text" placeholder="输入关键词搜索制度..." value="年假" class="w-full pl-10 pr-4 py-2.5 bg-surface border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all">
+          </div>
+          <div class="mt-3 flex flex-wrap gap-1.5">
+            <span class="px-2.5 py-1 bg-accent text-white text-xs font-medium rounded-full cursor-pointer">全部</span>
+            <span class="px-2.5 py-1 bg-surface-muted text-slate-600 text-xs rounded-full hover:bg-slate-200 cursor-pointer transition-colors">考勤制度</span>
+            <span class="px-2.5 py-1 bg-surface-muted text-slate-600 text-xs rounded-full hover:bg-slate-200 cursor-pointer transition-colors">休假制度</span>
+            <span class="px-2.5 py-1 bg-surface-muted text-slate-600 text-xs rounded-full hover:bg-slate-200 cursor-pointer transition-colors">薪酬制度</span>
+            <span class="px-2.5 py-1 bg-surface-muted text-slate-600 text-xs rounded-full hover:bg-slate-200 cursor-pointer transition-colors">福利制度</span>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-3">
+          <p class="text-xs text-slate-400 mb-2">找到 <span class="font-semibold text-slate-600">12</span> 条相关制度</p>
+
+          <div class="p-4 border border-border rounded-lg hover:border-accent/50 hover:shadow-sm cursor-pointer transition-all group">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="text-sm font-semibold text-slate-800 group-hover:text-accent transition-colors">年假天数与工龄计算规定</h3>
+              <span class="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full flex-shrink-0 ml-2">可查看</span>
+            </div>
+            <p class="text-xs text-slate-500 line-clamp-2 mb-2">
+              ...员工累计工作已满1年不满10年的，<span class="search-highlight font-medium text-slate-700">年假</span>5天；已满10年不满20年的，<span class="search-highlight font-medium text-slate-700">年假</span>10天...
+            </p>
+            <div class="flex items-center gap-3 text-xs text-slate-400">
+              <span>休假制度 · 年假规定</span><span>V2.1</span><span>2026-06-15</span>
+            </div>
+          </div>
+
+          <div class="p-4 border border-border rounded-lg hover:border-accent/50 hover:shadow-sm cursor-pointer transition-all group">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="text-sm font-semibold text-slate-800 group-hover:text-accent transition-colors">年假申请流程与审批规范</h3>
+              <span class="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full flex-shrink-0 ml-2">可查看</span>
+            </div>
+            <p class="text-xs text-slate-500 line-clamp-2 mb-2">
+              ...员工申请<span class="search-highlight font-medium text-slate-700">年假</span>需提前3个工作日通过OA系统提交...
+            </p>
+            <div class="flex items-center gap-3 text-xs text-slate-400">
+              <span>休假制度 · 年假规定</span><span>V1.3</span><span>2026-05-20</span>
+            </div>
+          </div>
+
+          <div class="p-4 border border-border rounded-lg hover:border-accent/50 hover:shadow-sm cursor-pointer transition-all group">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="text-sm font-semibold text-slate-800 group-hover:text-accent transition-colors">病假与年假转换政策说明</h3>
+              <span class="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full flex-shrink-0 ml-2">需HR权限</span>
+            </div>
+            <p class="text-xs text-slate-500 line-clamp-2 mb-2">
+              <span class="text-amber-600">🔒 </span>该文档需要HR专员及以上权限才能查看完整内容
+            </p>
+            <div class="flex items-center gap-3 text-xs text-slate-400">
+              <span>休假制度 · 病假规定</span><span>V1.0</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 右侧文档详情 -->
+      <section class="hidden lg:flex flex-1 bg-surface flex-col">
+        <div class="p-6 border-b border-border bg-white">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-bold text-primary">年假天数与工龄计算规定</h2>
+              <div class="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
+                <span>休假制度 · 年假规定</span>
+                <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+                <span>版本 V2.1</span>
+                <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+                <span>2026-06-15 更新</span>
+              </div>
+            </div>
+            <button class="px-3 py-1.5 text-xs text-accent border border-accent rounded-lg hover:bg-accent/5">纠错反馈</button>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto scrollbar-thin p-8">
+          <article class="max-w-3xl mx-auto text-sm text-slate-600 leading-relaxed space-y-4">
+            <h3 class="text-lg font-bold text-primary">第一条 年假享受条件</h3>
+            <p>员工连续工作满1年以上的，享受带薪年休假（以下简称年假）。员工在年假期间享受与正常工作期间相同的工资收入。</p>
+            <h3 class="text-lg font-bold text-primary">第二条 年假天数标准</h3>
+            <p>员工累计工作年限满1年不满10年的，年假<span class="search-highlight font-semibold">5天</span>；满10年不满20年的，年假<span class="search-highlight font-semibold">10天</span>；满20年的，年假<span class="search-highlight font-semibold">15天</span>。</p>
+            <h3 class="text-lg font-bold text-primary">第三条 年假申请流程</h3>
+            <p>员工申请年假需提前3个工作日通过OA系统提交，由直属主管审批。连续申请5天以上需提前7个工作日申请。年假最小申请单位为半天。</p>
+            <div class="bg-accent/5 border border-accent/20 rounded-lg p-4">
+              <p class="text-sm font-medium text-accent mb-1">提示</p>
+              <p class="text-xs">当年未休完的年假可延期至次年3月31日，过期作废。</p>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <!-- 视图2：AI问答 -->
+    <div id="chatView" class="hidden flex-1 flex overflow-hidden">
+      <aside class="w-72 border-r border-border bg-white flex flex-col flex-shrink-0">
+        <div class="p-4 border-b border-border">
+          <button class="w-full py-2.5 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent-hover transition-colors flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            新建会话
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-1">
+          <div class="px-3 py-2.5 rounded-lg bg-accent/10 cursor-pointer">
+            <p class="text-sm font-medium text-accent truncate">年假天数咨询</p>
+            <p class="text-xs text-slate-400 mt-0.5">今天 10:30</p>
+          </div>
+          <div class="px-3 py-2.5 rounded-lg hover:bg-surface-muted cursor-pointer transition-colors">
+            <p class="text-sm text-slate-600 truncate">加班费计算规则</p><p class="text-xs text-slate-400 mt-0.5">昨天 15:22</p>
+          </div>
+          <div class="px-3 py-2.5 rounded-lg hover:bg-surface-muted cursor-pointer transition-colors">
+            <p class="text-sm text-slate-600 truncate">婚假申请条件</p><p class="text-xs text-slate-400 mt-0.5">6月20日</p>
+          </div>
+        </div>
+      </aside>
+
+      <section class="flex-1 flex flex-col bg-surface">
+        <div class="px-6 py-4 border-b border-border bg-white flex items-center justify-between">
+          <h2 class="font-semibold text-primary">年假天数咨询</h2>
+          <button class="text-slate-400 hover:text-slate-600 p-1">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-6">
+          <div class="flex justify-end">
+            <div class="chat-bubble-user max-w-[70%] px-4 py-3 shadow-sm">
+              <p class="text-sm">我的工龄是3年，请问我有多少天年假？</p>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-semibold ml-3 flex-shrink-0">张</div>
+          </div>
+          <div class="flex justify-start">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center flex-shrink-0 mr-3">
+              <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <div class="chat-bubble-ai max-w-[70%] px-4 py-3 shadow-sm">
+              <p class="text-sm leading-relaxed mb-2">根据《年假天数与工龄计算规定》第二条：</p>
+              <p class="text-sm leading-relaxed mb-2">您的工龄3年，属于"满1年不满10年"范围，每年享有 <span class="font-bold text-accent">5天</span> 带薪年假。</p>
+              <div class="flex items-center gap-2 text-xs text-slate-400 mt-2 pt-2 border-t border-slate-200">
+                <span>来源：年假天数与工龄计算规定 V2.1</span>
+                <span>响应：120ms</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <div class="chat-bubble-user max-w-[70%] px-4 py-3 shadow-sm">
+              <p class="text-sm">如果今年没休完可以延到明年吗？</p>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-semibold ml-3 flex-shrink-0">张</div>
+          </div>
+          <div class="flex justify-start">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center flex-shrink-0 mr-3">
+              <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <div class="chat-bubble-ai max-w-[70%] px-4 py-3 shadow-sm">
+              <p class="text-sm leading-relaxed">✅ 当年未休完的年假可<strong>延期至次年3月31日</strong></p>
+              <p class="text-sm leading-relaxed">⚠️ 逾期未休的年假将<strong>自动作废</strong></p>
+            </div>
+          </div>
+
+          <div class="flex justify-center gap-4 mt-4">
+            <button class="flex items-center gap-1.5 px-4 py-2 text-xs text-slate-400 border border-border rounded-full hover:text-green-600 hover:border-green-300 hover:bg-green-50 transition-all">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"/></svg>
+              有帮助
+            </button>
+            <button class="flex items-center gap-1.5 px-4 py-2 text-xs text-slate-400 border border-border rounded-full hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-all">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5"/></svg>
+              无帮助
+            </button>
+            <button class="flex items-center gap-1.5 px-4 py-2 text-xs text-slate-400 border border-border rounded-full hover:text-amber-600 hover:border-amber-300 hover:bg-amber-50 transition-all">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+              收藏
+            </button>
+          </div>
+        </div>
+
+        <div class="px-6 py-4 border-t border-border bg-white">
+          <div class="flex items-end gap-3">
+            <div class="flex-1 relative">
+              <textarea rows="2" placeholder="输入您的问题..." class="w-full px-4 py-3 pr-12 bg-surface border border-border rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"></textarea>
+              <button class="absolute right-3 bottom-3 p-1.5 bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+              </button>
+            </div>
+          </div>
+          <p class="text-xs text-slate-400 mt-2 text-center">AI回答仅供参考，请以制度原文为准 | 每分钟限20次提问</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- 视图3：常见问题 FAQ -->
+    <div id="faqView" class="hidden flex-1 overflow-hidden flex">
+      <!-- 左侧分类 -->
+      <aside class="w-52 lg:w-60 border-r border-border bg-white flex flex-col flex-shrink-0">
+        <div class="p-4 border-b border-border">
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="text" placeholder="搜索常见问题..." class="w-full pl-9 pr-3 py-2 bg-surface border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/20">
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-0.5">
+          <div class="px-3 py-2 rounded-lg bg-accent/10 text-sm font-medium text-accent cursor-pointer">全部FAQ</div>
+          <div class="px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-surface-muted cursor-pointer">考勤FAQ</div>
+          <div class="px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-surface-muted cursor-pointer">薪酬FAQ</div>
+          <div class="px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-surface-muted cursor-pointer">休假FAQ</div>
+          <div class="px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-surface-muted cursor-pointer">福利FAQ</div>
+          <div class="px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-surface-muted cursor-pointer">绩效FAQ</div>
+        </div>
+      </aside>
+
+      <!-- 右侧FAQ列表 -->
+      <section class="flex-1 bg-surface flex flex-col">
+        <div class="p-6 bg-white border-b border-border">
+          <h2 class="text-lg font-bold text-primary">常见问题 (FAQ)</h2>
+          <p class="text-sm text-slate-400 mt-1">共 <span class="font-semibold text-slate-600">138</span> 条常见问题</p>
+        </div>
+        <div class="flex-1 overflow-y-auto scrollbar-thin p-6">
+          <div class="max-w-3xl mx-auto space-y-3">
+            <!-- FAQ 折叠卡片 -->
+            <details class="bg-white border border-border rounded-xl group open:border-accent/30 transition-colors">
+              <summary class="flex items-center justify-between p-5 cursor-pointer list-none">
+                <span class="text-sm font-semibold text-slate-800 group-open:text-accent transition-colors pr-4">年假有多少天？工龄不同有什么区别？</span>
+                <svg class="w-5 h-5 text-slate-400 flex-shrink-0 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </summary>
+              <div class="px-5 pb-5 text-sm text-slate-600 leading-relaxed border-t border-border-light pt-4">
+                <p>根据《年假天数与工龄计算规定》第二条：</p>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                  <li>工龄 <strong>1-10年</strong>：每年 <strong>5天</strong> 带薪年假</li>
+                  <li>工龄 <strong>10-20年</strong>：每年 <strong>10天</strong> 带薪年假</li>
+                  <li>工龄 <strong>20年以上</strong>：每年 <strong>15天</strong> 带薪年假</li>
+                </ul>
+                <div class="flex items-center gap-3 mt-3 text-xs text-slate-400">
+                  <span>来源：年假天数与工龄计算规定 V2.1</span>
+                  <span>被查看 1,234 次</span>
+                </div>
+              </div>
+            </details>
+
+            <details class="bg-white border border-border rounded-xl group open:border-accent/30 transition-colors">
+              <summary class="flex items-center justify-between p-5 cursor-pointer list-none">
+                <span class="text-sm font-semibold text-slate-800 group-open:text-accent transition-colors pr-4">加班费怎么计算？平时和周末有区别吗？</span>
+                <svg class="w-5 h-5 text-slate-400 flex-shrink-0 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </summary>
+              <div class="px-5 pb-5 text-sm text-slate-600 leading-relaxed border-t border-border-light pt-4">
+                <ul class="list-disc pl-5 space-y-1">
+                  <li><strong>工作日加班</strong>：按 <strong>1.5倍</strong> 工资计算</li>
+                  <li><strong>休息日加班</strong>：按 <strong>2倍</strong> 工资计算</li>
+                  <li><strong>法定节假日加班</strong>：按 <strong>3倍</strong> 工资计算</li>
+                </ul>
+                <p class="mt-2 text-xs text-slate-400">加班需提前申请并经主管审批通过。</p>
+                <div class="flex items-center gap-3 mt-3 text-xs text-slate-400">
+                  <span>来源：加班政策 V2.0</span>
+                  <span>被查看 987 次</span>
+                </div>
+              </div>
+            </details>
+
+            <details class="bg-white border border-border rounded-xl group open:border-accent/30 transition-colors">
+              <summary class="flex items-center justify-between p-5 cursor-pointer list-none">
+                <span class="text-sm font-semibold text-slate-800 group-open:text-accent transition-colors pr-4">婚假能休多少天？需要什么材料？</span>
+                <svg class="w-5 h-5 text-slate-400 flex-shrink-0 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </summary>
+              <div class="px-5 pb-5 text-sm text-slate-600 leading-relaxed border-t border-border-light pt-4">
+                <ul class="list-disc pl-5 space-y-1">
+                  <li>符合法定结婚年龄（男22/女20周岁）：<strong>3天</strong>婚假</li>
+                  <li>晚婚（男25/女23周岁以上）：额外 <strong>7天</strong>，共 <strong>10天</strong></li>
+                </ul>
+                <p class="mt-2 text-xs text-slate-400">需提供结婚证复印件，提前1个月申请。</p>
+                <div class="flex items-center gap-3 mt-3 text-xs text-slate-400">
+                  <span>来源：婚假/产假规定 V1.5</span>
+                  <span>被查看 756 次</span>
+                </div>
+              </div>
+            </details>
+
+            <details class="bg-white border border-border rounded-xl group open:border-accent/30 transition-colors">
+              <summary class="flex items-center justify-between p-5 cursor-pointer list-none">
+                <span class="text-sm font-semibold text-slate-800 group-open:text-accent transition-colors pr-4">公司每年安排体检吗？家属可以参加吗？</span>
+                <svg class="w-5 h-5 text-slate-400 flex-shrink-0 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </summary>
+              <div class="px-5 pb-5 text-sm text-slate-600 leading-relaxed border-t border-border-light pt-4">
+                <p>公司每年为入职满1年的员工安排 <strong>一次免费健康体检</strong>。家属可享受优惠价格参加。</p>
+                <br><p>体检时间一般在每年 <strong>5-6月</strong>，由HR统一邮件通知。</p>
+                <div class="flex items-center gap-3 mt-3 text-xs text-slate-400">
+                  <span>来源：健康体检政策 V1.0</span>
+                  <span>被查看 543 次</span>
+                </div>
+              </div>
+            </details>
+
+            <details class="bg-white border border-border rounded-xl group open:border-accent/30 transition-colors">
+              <summary class="flex items-center justify-between p-5 cursor-pointer list-none">
+                <span class="text-sm font-semibold text-slate-800 group-open:text-accent transition-colors pr-4">绩效考核的标准是什么？多久考核一次？</span>
+                <svg class="w-5 h-5 text-slate-400 flex-shrink-0 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </summary>
+              <div class="px-5 pb-5 text-sm text-slate-600 leading-relaxed border-t border-border-light pt-4">
+                <p>绩效考核按 <strong>季度</strong> 进行，每年 <strong>4次</strong>。评分标准包括工作业绩、能力素质、团队协作三个维度。</p>
+                <br><p>年度总分 = 各季度平均分 × 80% + 年度述职 × 20%。</p>
+                <div class="flex items-center gap-3 mt-3 text-xs text-slate-400">
+                  <span>来源：考核周期规定 V2.5</span>
+                  <span>被查看 432 次</span>
+                </div>
+              </div>
+            </details>
+
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 视图：通知消息 -->
+    <div id="notificationsView" class="hidden flex-1 overflow-hidden flex-col bg-surface">
+      <div class="p-6 bg-white border-b border-border">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-bold text-primary">通知消息</h2>
+            <p class="text-sm text-slate-400 mt-1">共 <span class="font-semibold text-slate-600">8</span> 条通知，<span class="text-danger font-semibold">3</span> 条未读</p>
+          </div>
+          <div class="flex gap-2">
+            <button class="px-3 py-1.5 text-xs text-accent border border-accent rounded-lg hover:bg-accent/5 transition-colors">全部已读</button>
+            <select class="px-3 py-1.5 border border-border rounded-lg text-sm text-slate-600 bg-white">
+              <option>全部</option><option>未读</option><option>重要</option><option>紧急</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto scrollbar-thin p-6">
+        <div class="max-w-3xl mx-auto space-y-3">
+
+          <!-- 紧急通知 -->
+          <div class="bg-red-50 border border-red-200 rounded-xl p-5 cursor-pointer hover:shadow-sm transition-shadow">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full">紧急</span>
+                  <span class="w-2 h-2 bg-red-500 rounded-full"></span>
+                  <span class="text-xs text-red-400 font-medium">未读</span>
+                </div>
+                <h3 class="font-semibold text-slate-800 mb-1">薪酬制度 V3.0 更新通知</h3>
+                <p class="text-sm text-slate-500 line-clamp-2 mb-3">薪酬制度已更新至V3.0版本，涉及薪资结构调整和个税计算方式变更，请全体员工及时查阅最新版本。</p>
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-400">系统管理员 · 今天 09:00</span>
+                  <span class="text-xs text-accent hover:underline cursor-pointer">查看详情 →</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 重要通知（未读） -->
+          <div class="bg-white border border-border rounded-xl p-5 cursor-pointer hover:shadow-sm transition-shadow">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">重要</span>
+                  <span class="w-2 h-2 bg-accent rounded-full"></span>
+                  <span class="text-xs text-accent font-medium">未读</span>
+                </div>
+                <h3 class="font-semibold text-slate-800 mb-1">关于2026年度健康体检安排的通知</h3>
+                <p class="text-sm text-slate-500 line-clamp-2 mb-3">本年度员工健康体检将于6月25日至7月15日进行，请各部门组织员工按时参加。体检地点、预约方式及注意事项详见通知。</p>
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-400">HR部门 · 昨天 14:30</span>
+                  <span class="text-xs text-accent hover:underline cursor-pointer">查看详情 →</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 普通通知（已读） -->
+          <div class="bg-white border border-border rounded-xl p-5 cursor-pointer hover:shadow-sm transition-shadow opacity-75">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">公告</span>
+                </div>
+                <h3 class="font-semibold text-slate-800 mb-1">年假制度修订说明</h3>
+                <p class="text-sm text-slate-500 line-clamp-2 mb-3">关于年假延期政策的补充说明：未休年假可延期至次年3月31日。因工作需要无法休假的特殊情况需部门总监审批。</p>
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-400">HR部门 · 6月20日</span>
+                  <span class="text-xs text-slate-400">已读</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-border rounded-xl p-5 cursor-pointer hover:shadow-sm transition-shadow opacity-75">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">公告</span>
+                </div>
+                <h3 class="font-semibold text-slate-800 mb-1">假期申请流程优化通知</h3>
+                <p class="text-sm text-slate-500 line-clamp-2 mb-3">为提升效率，OA系统假期申请流程已优化，新增移动端审批功能。具体操作请参阅用户指南。</p>
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-400">系统管理员 · 6月18日</span>
+                  <span class="text-xs text-slate-400">已读</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-border rounded-xl p-5 cursor-pointer hover:shadow-sm transition-shadow opacity-75">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full">系统</span>
+                </div>
+                <h3 class="font-semibold text-slate-800 mb-1">HR制度智能问答系统正式上线</h3>
+                <p class="text-sm text-slate-500 line-clamp-2 mb-3">欢迎使用HR制度智能问答系统！本系统提供7×24小时制度查询与AI问答服务，快速获取准确的HR政策答案。</p>
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-400">系统管理员 · 6月15日</span>
+                  <span class="text-xs text-slate-400">已读</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- 视图4：问答历史 -->
+    <div id="historyView" class="hidden flex-1 overflow-hidden flex-col bg-surface">
+      <div class="p-6 bg-white border-b border-border">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-bold text-primary">我的问答历史</h2>
+            <p class="text-sm text-slate-400 mt-1">共 <span class="font-semibold text-slate-600">47</span> 条记录</p>
+          </div>
+          <div class="flex gap-2">
+            <select class="px-3 py-1.5 border border-border rounded-lg text-sm text-slate-600 bg-white">
+              <option>全部类型</option><option>FAQ匹配</option><option>全文搜索</option><option>规则匹配</option>
+            </select>
+            <div class="relative">
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input type="text" placeholder="搜索历史..." class="pl-9 pr-3 py-1.5 border border-border rounded-lg text-sm w-48 focus:outline-none focus:ring-2 focus:ring-accent/20">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto scrollbar-thin p-6">
+        <div class="max-w-4xl mx-auto space-y-3">
+          <div class="bg-white border border-border rounded-lg p-4 hover:shadow-sm transition-shadow cursor-pointer">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="text-sm font-semibold text-slate-800">我的工龄是3年，请问我有多少天年假？</h3>
+              <span class="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">规则匹配</span>
+            </div>
+            <p class="text-xs text-slate-500 line-clamp-2 mb-3">根据规定，您的工龄3年属于"满1年不满10年"，每年享有5天带薪年假。</p>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-400">今天 10:30 · 响应 120ms</span>
+              <svg class="w-4 h-4 text-slate-300 cursor-pointer hover:text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+            </div>
+          </div>
+          <div class="bg-white border border-border rounded-lg p-4 hover:shadow-sm transition-shadow cursor-pointer">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="text-sm font-semibold text-slate-800">加班费如何计算？</h3>
+              <span class="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">FAQ匹配</span>
+            </div>
+            <p class="text-xs text-slate-500 line-clamp-2 mb-3">工作日加班1.5倍，休息日2倍，法定节假日3倍工资。</p>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-400">昨天 15:22 · 响应 85ms</span>
+            </div>
+          </div>
+          <div class="bg-white border border-border rounded-lg p-4 hover:shadow-sm transition-shadow cursor-pointer">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="text-sm font-semibold text-slate-800">婚假需要满足什么条件？</h3>
+              <span class="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">FAQ匹配</span>
+            </div>
+            <p class="text-xs text-slate-500 line-clamp-2 mb-3">符合法定年龄可享受3天婚假，晚婚额外7天共10天。</p>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-400">6月20日 · 响应 95ms</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-center mt-6 gap-1">
+          <button class="px-3 py-1.5 text-sm text-slate-400 border border-border rounded-lg">上一页</button>
+          <button class="px-3 py-1.5 text-sm bg-accent text-white rounded-lg">1</button>
+          <button class="px-3 py-1.5 text-sm text-slate-600 border border-border rounded-lg">2</button>
+          <button class="px-3 py-1.5 text-sm text-slate-600 border border-border rounded-lg">3</button>
+          <button class="px-3 py-1.5 text-sm text-slate-600 border border-border rounded-lg">下一页</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 视图4：收藏 -->
+    <div id="favoritesView" class="hidden flex-1 overflow-hidden flex-col bg-surface">
+      <div class="p-6 bg-white border-b border-border">
+        <h2 class="text-lg font-bold text-primary">我的收藏</h2>
+        <p class="text-sm text-slate-400 mt-1">共 <span class="font-semibold text-slate-600">5</span> 条收藏</p>
+      </div>
+      <div class="flex-1 overflow-y-auto scrollbar-thin p-6">
+        <div class="max-w-4xl mx-auto space-y-3">
+          <div class="bg-white border border-border rounded-lg p-4 hover:shadow-sm transition-shadow cursor-pointer flex items-start gap-4">
+            <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+            <div class="flex-1">
+              <h3 class="text-sm font-semibold text-slate-800">加班费如何计算？</h3>
+              <p class="text-xs text-slate-400 mt-1">收藏于 昨天 15:30</p>
+            </div>
+          </div>
+          <div class="bg-white border border-border rounded-lg p-4 hover:shadow-sm transition-shadow cursor-pointer flex items-start gap-4">
+            <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+            <div class="flex-1">
+              <h3 class="text-sm font-semibold text-slate-800">年假如果今年没休完可以延到明年吗？</h3>
+              <p class="text-xs text-slate-400 mt-1">收藏于 今天 10:35</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    function switchView(view) {
+      document.querySelectorAll('header nav button').forEach((btn, i) => {
+        btn.classList.toggle('bg-accent', false);
+        btn.classList.toggle('text-white', false);
+        btn.classList.add('text-slate-500');
+      });
+      const tabs = document.querySelectorAll('header nav button');
+      const idx = { search: 0, chat: 1, faq: 2, notifications: 3, history: 4, favorites: 5 }[view] || 0;
+      tabs[idx].classList.remove('text-slate-500');
+      tabs[idx].classList.add('bg-accent', 'text-white');
+
+      ['searchView','chatView','faqView','notificationsView','historyView','favoritesView'].forEach(id => {
+        const el = document.getElementById(id);
+        if (id === view + 'View') {
+          el.classList.remove('hidden');
+          el.classList.add('flex');
+          if (id === 'notificationsView' || id === 'historyView' || id === 'favoritesView') el.classList.add('flex-col');
+        } else {
+          el.classList.add('hidden');
+          el.classList.remove('flex', 'flex-col');
+        }
+      });
+    }
+  </script>
+</body>
+</html>

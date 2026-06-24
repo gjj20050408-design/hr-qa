@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HR制度智能问答系统 - 界面原型</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>body{font-family:'PingFang SC','Microsoft YaHei',system-ui,sans-serif}</style>
+  <script>tailwind.config={theme:{extend:{colors:{primary:'#0F172A',accent:'#0369A1'}}}}</script>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+  <div class="max-w-4xl mx-auto px-6 py-16">
+    <div class="text-center mb-12">
+      <div class="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-5">
+        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      </div>
+      <h1 class="text-3xl font-bold text-primary mb-3">HR制度智能问答系统</h1>
+      <p class="text-slate-500 text-lg">界面原型预览</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <a href="login.html" class="group bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:border-accent/30 transition-all">
+        <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center mb-4 group-hover:bg-blue-100">
+          <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+        </div>
+        <h2 class="font-semibold text-primary mb-1">登录 / 注册</h2>
+        <p class="text-sm text-slate-400">用户认证页面，登录和注册Tab</p>
+        <span class="inline-block mt-3 text-xs text-accent font-medium">查看原型 →</span>
+      </a>
+      <a href="employee.html" class="group bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:border-accent/30 transition-all">
+        <div class="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center mb-4 group-hover:bg-green-100">
+          <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+        <h2 class="font-semibold text-primary mb-1">员工端界面</h2>
+        <p class="text-sm text-slate-400">搜索+对话分离布局，含搜索、AI问答、历史、收藏4个视图</p>
+        <span class="inline-block mt-3 text-xs text-accent font-medium">查看原型 →</span>
+      </a>
+      <a href="admin.html" class="group bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:border-accent/30 transition-all">
+        <div class="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center mb-4 group-hover:bg-purple-100">
+          <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z"/></svg>
+        </div>
+        <h2 class="font-semibold text-primary mb-1">管理后台界面</h2>
+        <p class="text-sm text-slate-400">数据驾驶舱、文档管理、FAQ管理、纠错审核等8个模块</p>
+        <span class="inline-block mt-3 text-xs text-accent font-medium">查看原型 →</span>
+      </a>
+    </div>
+
+    <div class="mt-12 bg-white rounded-2xl border border-slate-200 p-8">
+      <h2 class="text-lg font-bold text-primary mb-4">设计系统说明</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-2">配色方案</h3>
+          <div class="space-y-2">
+            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded" style="background:#0F172A"></div><span>Primary #0F172A</span></div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded" style="background:#334155"></div><span>Secondary #334155</span></div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded" style="background:#0369A1"></div><span>CTA #0369A1</span></div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 rounded border" style="background:#F8FAFC"></div><span>Background #F8FAFC</span></div>
+          </div>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-2">字体</h3>
+          <p class="text-slate-500">Inter + PingFang SC<br>中文系统默认字体</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 mb-2">设计风格</h3>
+          <p class="text-slate-500">Flat Design + Glassmorphism<br>企业专业简约风</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台 - HR制度智能问答系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'] },
+          colors: {
+            primary: { DEFAULT: '#0F172A', light: '#1E293B', hover: '#334155' },
+            accent: { DEFAULT: '#0369A1', light: '#0284C7', hover: '#075985' },
+            surface: { DEFAULT: '#F8FAFC', card: '#FFFFFF', muted: '#F1F5F9' },
+            border: { DEFAULT: '#E2E8F0', light: '#F1F5F9' },
+            success: '#10B981', warning: '#F59E0B', danger: '#EF4444',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif; }
+    .sidebar-link {
+      @apply flex items-center gap-3 w-full text-left transition-all duration-150 cursor-pointer;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #64748B;
+      border-radius: 8px;
+      margin-bottom: 4px;
+    }
+    .sidebar-link:hover { background: #F8FAFC; color: #334155; }
+    .sidebar-link.active { background: #EFF6FF; color: #0369A1; font-weight: 600; }
+    .sidebar-link .link-icon { @apply flex-shrink-0 transition-colors; }
+    .sidebar-link.active .link-icon { color: #0369A1; }
+    .sidebar-section-title {
+      @apply text-[11px] font-semibold tracking-wider px-4 py-2 mt-4 mb-1;
+      color: #94A3B8;
+      letter-spacing: 0.05em;
+    }
+    .badge-dot {
+      @apply ml-auto w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold leading-none;
+      background: #EF4444;
+      min-width: 20px;
+    }
+    .stat-card { @apply bg-white border border-border rounded-xl p-5 hover:shadow-md transition-shadow cursor-pointer; }
+    .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+  </style>
+</head>
+<body class="bg-surface h-screen flex overflow-hidden">
+
+  <!-- 左侧导航 -->
+  <aside class="w-60 bg-white border-r border-border flex flex-col flex-shrink-0">
+    <!-- Logo 区 -->
+    <div class="px-5 pt-5 pb-4 flex items-center gap-3">
+      <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      </div>
+      <div>
+        <h1 class="text-sm font-bold text-primary leading-tight">HR问答系统</h1>
+        <p class="text-[11px] text-slate-400 leading-tight">管理后台</p>
+      </div>
+    </div>
+
+    <!-- 导航菜单 -->
+    <nav class="flex-1 px-3 overflow-y-auto scrollbar-thin" id="adminNav">
+
+      <!-- 核心功能 -->
+      <div class="sidebar-section-title">核心功能</div>
+
+      <button class="sidebar-link active" data-view="dashboard">
+        <svg class="w-[18px] h-[18px] link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+        <span>数据驾驶舱</span>
+      </button>
+
+      <button class="sidebar-link" data-view="documents">
+        <svg class="w-[18px] h-[18px] link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+        <span>文档管理</span>
+      </button>
+
+      <button class="sidebar-link" data-view="faqs">
+        <svg class="w-[18px] h-[18px] link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>FAQ 管理</span>
+      </button>
+
+      <button class="sidebar-link" data-view="corrections">
+        <svg class="w-[18px] h-[18px] link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>纠错审核</span>
+        <span class="badge-dot">3</span>
+      </button>
+
+      <button class="sidebar-link" data-view="categories">
+        <svg class="w-[18px] h-[18px] link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        <span>分类权限</span>
+      </button>
+
+      <!-- 分隔 -->
+      <div class="sidebar-section-title">内容运营</div>
+
+      <button class="sidebar-link" data-view="announcements">
+        <svg class="w-[18px] h-[18px] link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+        <span>通知公告</span>
+      </button>
+
+      <div class="sidebar-section-title">系统管理</div>
+
+      <button class="sidebar-link" data-view="users">
+        <svg class="w-[18px] h-[18px] link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        <span>用户管理</span>
+      </button>
+
+      <button class="sidebar-link" data-view="audit">
+        <svg class="w-[18px] h-[18px] link-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+        <span>审计日志</span>
+      </button>
+
+    </nav>
+
+    <!-- 底部 -->
+    <div class="p-3 border-t border-border">
+      <a href="employee.html" class="flex items-center justify-center gap-2 py-2 text-xs rounded-lg text-slate-400 hover:text-accent hover:bg-accent/5 transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+        切换到员工端
+      </a>
+    </div>
+  </aside>
+
+  <!-- 右侧主内容 -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <header class="bg-white border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0">
+      <h2 class="text-base font-semibold text-primary" id="viewTitle">数据驾驶舱</h2>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-white text-xs font-semibold">管</div>
+          <span class="text-sm text-slate-600">系统管理员</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto scrollbar-thin p-6" id="contentArea">
+
+      <!-- Dashboard -->
+      <div id="view-dashboard">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm text-slate-500">今日问答</span>
+              <div class="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+              </div>
+            </div>
+            <p class="text-2xl font-bold text-primary">1,247</p>
+            <p class="text-xs text-green-600 mt-1">↑ 12.5% 较昨日</p>
+          </div>
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm text-slate-500">活跃用户</span>
+              <div class="w-9 h-9 rounded-lg bg-green-50 flex items-center justify-center">
+                <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              </div>
+            </div>
+            <p class="text-2xl font-bold text-primary">328</p>
+            <p class="text-xs text-green-600 mt-1">↑ 8.3% 较昨日</p>
+          </div>
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm text-slate-500">制度文档</span>
+              <div class="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center">
+                <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              </div>
+            </div>
+            <p class="text-2xl font-bold text-primary">86</p>
+            <p class="text-xs text-slate-400 mt-1">已发布 72 · 草稿 14</p>
+          </div>
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm text-slate-500">FAQ条目</span>
+              <div class="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center">
+                <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+            </div>
+            <p class="text-2xl font-bold text-primary">145</p>
+            <p class="text-xs text-slate-400 mt-1">活跃 138 · 归档 7</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div class="bg-white border border-border rounded-xl p-5">
+            <h3 class="text-sm font-semibold text-primary mb-4">问答趋势（近7天）</h3>
+            <div id="chartTrend" style="height:280px;"></div>
+          </div>
+          <div class="bg-white border border-border rounded-xl p-5">
+            <h3 class="text-sm font-semibold text-primary mb-4">问答类型分布</h3>
+            <div id="chartPie" style="height:280px;"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="bg-white border border-border rounded-xl p-5 lg:col-span-2">
+            <h3 class="text-sm font-semibold text-primary mb-4">热门问题 TOP 10</h3>
+            <div class="space-y-3">
+              <div class="flex justify-between text-sm"><span class="text-slate-700">1. 年假有多少天？</span><span class="text-slate-400">1,234 次</span></div>
+              <div class="w-full bg-surface rounded-full h-1.5"><div class="bg-accent h-1.5 rounded-full" style="width:85%"></div></div>
+              <div class="flex justify-between text-sm"><span class="text-slate-700">2. 加班费怎么算？</span><span class="text-slate-400">987 次</span></div>
+              <div class="w-full bg-surface rounded-full h-1.5"><div class="bg-accent h-1.5 rounded-full" style="width:68%"></div></div>
+              <div class="flex justify-between text-sm"><span class="text-slate-700">3. 婚假几天？</span><span class="text-slate-400">756 次</span></div>
+              <div class="w-full bg-surface rounded-full h-1.5"><div class="bg-accent h-1.5 rounded-full" style="width:52%"></div></div>
+            </div>
+          </div>
+          <div class="bg-white border border-border rounded-xl p-5">
+            <h3 class="text-sm font-semibold text-primary mb-4">分类覆盖率</h3>
+            <div id="chartCategory" style="height:280px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Documents -->
+      <div id="view-documents" class="hidden">
+        <div class="flex items-center justify-between mb-6">
+          <div class="flex items-center gap-3">
+            <div class="relative">
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input type="text" placeholder="搜索文档..." class="pl-9 pr-3 py-2 border border-border rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-accent/20">
+            </div>
+            <select class="px-3 py-2 border border-border rounded-lg text-sm bg-white"><option>全部状态</option><option>已发布</option></select>
+            <select class="px-3 py-2 border border-border rounded-lg text-sm bg-white"><option>全部分类</option></select>
+          </div>
+          <button class="px-4 py-2 bg-accent text-white text-sm rounded-lg hover:bg-accent-hover flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>上传文档
+          </button>
+        </div>
+        <div class="bg-white border border-border rounded-xl overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-surface-muted">
+              <tr><th class="text-left px-4 py-3 font-medium">文档标题</th><th class="text-left px-4 py-3 font-medium">分类</th><th class="text-left px-4 py-3 font-medium">版本</th><th class="text-left px-4 py-3 font-medium">状态</th><th class="text-left px-4 py-3 font-medium">权限</th><th class="text-left px-4 py-3 font-medium">更新时间</th><th class="text-left px-4 py-3 font-medium">操作</th></tr>
+            </thead>
+            <tbody class="divide-y">
+              <tr class="hover:bg-surface-muted/50"><td class="px-4 py-3 font-medium">年假天数与工龄计算规定</td><td class="px-4 py-3 text-slate-500">休假制度</td><td class="px-4 py-3">V2.1</td><td class="px-4 py-3"><span class="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">已发布</span></td><td class="px-4 py-3"><span class="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">全员</span></td><td class="px-4 py-3 text-slate-400">2026-06-15</td><td class="px-4 py-3"><button class="text-accent text-xs hover:underline">编辑</button></td></tr>
+              <tr class="hover:bg-surface-muted/50"><td class="px-4 py-3 font-medium">薪资结构与发放标准</td><td class="px-4 py-3 text-slate-500">薪酬制度</td><td class="px-4 py-3">V3.0</td><td class="px-4 py-3"><span class="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">已发布</span></td><td class="px-4 py-3"><span class="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">HR可见</span></td><td class="px-4 py-3 text-slate-400">2026-06-10</td><td class="px-4 py-3"><button class="text-accent text-xs hover:underline">编辑</button></td></tr>
+              <tr class="hover:bg-surface-muted/50"><td class="px-4 py-3 font-medium">健康体检福利政策</td><td class="px-4 py-3 text-slate-500">福利制度</td><td class="px-4 py-3">V1.0</td><td class="px-4 py-3"><span class="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">已归档</span></td><td class="px-4 py-3"><span class="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">全员</span></td><td class="px-4 py-3 text-slate-400">2026-03-01</td><td class="px-4 py-3"><button class="text-accent text-xs hover:underline">编辑</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- FAQs -->
+      <div id="view-faqs" class="hidden">
+        <div class="flex justify-between mb-6">
+          <div class="flex gap-3"><input type="text" placeholder="搜索FAQ..." class="pl-3 pr-3 py-2 border border-border rounded-lg text-sm w-64"><select class="px-3 py-2 border border-border rounded-lg text-sm bg-white"><option>全部分类</option></select></div>
+          <button class="px-4 py-2 bg-accent text-white text-sm rounded-lg hover:bg-accent-hover">新增FAQ</button>
+        </div>
+        <div class="space-y-3">
+          <div class="bg-white border border-border rounded-xl p-5">
+            <div class="flex justify-between mb-2"><h3 class="font-semibold">年假有多少天？</h3><span class="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">考勤FAQ</span></div>
+            <p class="text-sm text-slate-500">工龄1-10年享5天，10-20年享10天，20年以上享15天带薪年假。</p>
+            <div class="flex justify-between mt-3 pt-3 border-t"><span class="text-xs text-slate-400">1,234 次匹配</span><button class="text-xs text-accent">编辑</button></div>
+          </div>
+          <div class="bg-white border border-border rounded-xl p-5">
+            <div class="flex justify-between mb-2"><h3 class="font-semibold">加班费怎么计算？</h3><span class="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">考勤FAQ</span></div>
+            <p class="text-sm text-slate-500">工作日1.5倍，休息日2倍，法定节假日3倍。</p>
+            <div class="flex justify-between mt-3 pt-3 border-t"><span class="text-xs text-slate-400">987 次匹配</span><button class="text-xs text-accent">编辑</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Corrections -->
+      <div id="view-corrections" class="hidden">
+        <select class="px-3 py-2 border border-border rounded-lg text-sm bg-white mb-4"><option>待审核</option></select>
+        <div class="space-y-3">
+          <div class="bg-white border border-border rounded-xl p-5">
+            <div class="flex justify-between">
+              <div class="flex-1">
+                <span class="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">待审核</span>
+                <span class="text-xs text-slate-400 ml-2">张三 · 2026-06-23</span>
+                <p class="text-sm mt-2">文档：年假天数与工龄计算规定 · 第二条</p>
+                <p class="text-sm bg-surface-muted p-3 rounded-lg mt-1">"工龄1-10年享5天" 应注明包含试用期。</p>
+              </div>
+              <div class="flex gap-2 ml-4"><button class="px-3 py-1.5 bg-success text-white text-xs rounded-lg">通过</button><button class="px-3 py-1.5 bg-danger text-white text-xs rounded-lg">驳回</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Categories -->
+      <div id="view-categories" class="hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="bg-white border border-border rounded-xl p-4">
+            <h3 class="font-semibold text-sm mb-3">考勤制度 <span class="text-blue-600 text-xs ml-2">全员可见</span></h3>
+            <div class="space-y-1 text-sm text-slate-600"><div class="py-2 px-3 bg-surface-muted rounded-lg">打卡管理</div><div class="py-2 px-3">加班政策</div><div class="py-2 px-3">调休规定</div></div>
+          </div>
+          <div class="bg-white border border-border rounded-xl p-4">
+            <h3 class="font-semibold text-sm mb-3">薪酬制度 <span class="text-amber-600 text-xs ml-2">HR可见</span></h3>
+            <div class="space-y-1 text-sm text-slate-600"><div class="py-2 px-3 bg-surface-muted rounded-lg">薪资结构</div><div class="py-2 px-3">奖金发放</div><div class="py-2 px-3">个税说明</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Placeholders -->
+      <div id="view-announcements" class="hidden"><h3 class="text-lg font-semibold mb-4">通知公告管理</h3><div class="space-y-3"><div class="bg-white border rounded-xl p-5"><h4 class="font-semibold">关于2026年度体检安排</h4><p class="text-sm text-slate-500 mt-1">已发布 · 全员 · 2026-06-20</p></div></div></div>
+      <div id="view-users" class="hidden"><h3 class="text-lg font-semibold mb-4">用户管理</h3><table class="w-full bg-white border rounded-xl text-sm"><thead class="bg-surface-muted"><tr><th class="text-left px-4 py-3">工号</th><th class="text-left px-4 py-3">姓名</th><th class="text-left px-4 py-3">部门</th><th class="text-left px-4 py-3">角色</th><th class="text-left px-4 py-3">状态</th></tr></thead><tbody><tr><td class="px-4 py-3">admin001</td><td class="px-4 py-3">系统管理员</td><td class="px-4 py-3">人力资源部</td><td class="px-4 py-3 text-red-600">管理员</td><td class="px-4 py-3 text-green-600">正常</td></tr><tr><td class="px-4 py-3">hr001</td><td class="px-4 py-3">李HR</td><td class="px-4 py-3">人力资源部</td><td class="px-4 py-3 text-amber-600">HR专员</td><td class="px-4 py-3 text-green-600">正常</td></tr></tbody></table></div>
+      <div id="view-audit" class="hidden"><h3 class="text-lg font-semibold mb-4">审计日志</h3><p class="text-sm text-slate-400">仅管理员可查看全量操作记录</p></div>
+    </div>
+  </main>
+
+  <script>
+    document.querySelectorAll('#adminNav button[data-view]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('#adminNav button[data-view]').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        document.getElementById('viewTitle').textContent = this.textContent.trim().replace(/^\d+/, '');
+        document.querySelectorAll('#contentArea > div[id^="view-"]').forEach(v => v.classList.add('hidden'));
+        const target = document.getElementById('view-' + this.dataset.view);
+        if (target) target.classList.remove('hidden');
+      });
+    });
+
+    setTimeout(() => {
+      const tc = echarts.init(document.getElementById('chartTrend'));
+      tc && tc.setOption({ tooltip:{trigger:'axis'}, grid:{left:40,right:20,top:10,bottom:30}, xAxis:{type:'category',data:['06/18','06/19','06/20','06/21','06/22','06/23','06/24']}, yAxis:{type:'value'}, series:[{type:'line',smooth:true,data:[820,932,901,1134,1023,1190,1247],itemStyle:{color:'#0369A1'},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(3,105,161,0.3)'},{offset:1,color:'rgba(3,105,161,0.02)'}]}}}] });
+      const pc = echarts.init(document.getElementById('chartPie'));
+      pc && pc.setOption({ tooltip:{trigger:'item'}, legend:{bottom:0}, series:[{type:'pie',radius:['50%','75%'],center:['50%','45%'],label:{show:false},data:[{value:45,name:'FAQ匹配',itemStyle:{color:'#10B981'}},{value:30,name:'全文搜索',itemStyle:{color:'#0369A1'}},{value:15,name:'规则匹配',itemStyle:{color:'#F59E0B'}},{value:10,name:'未找到',itemStyle:{color:'#EF4444'}}]}] });
+      const cc = echarts.init(document.getElementById('chartCategory'));
+      cc && cc.setOption({ tooltip:{trigger:'axis'}, grid:{left:100,right:20,top:10,bottom:20}, xAxis:{type:'value'}, yAxis:{type:'category',data:['考勤','薪酬','福利','休假','绩效']}, series:[{type:'bar',data:[95,78,88,92,65],itemStyle:{color:'#0369A1',borderRadius:[0,4,4,0]},barMaxWidth:20}] });
+    }, 100);
+  </script>
+</body>
+</html>
