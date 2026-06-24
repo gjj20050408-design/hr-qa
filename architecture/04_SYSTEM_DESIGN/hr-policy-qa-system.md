@@ -1116,7 +1116,8 @@ LLM API 调用
 
 - [PRD V1.0 — 主需求文档](../../prd/HR制度智能问答系统-PRD-v0.1.md)
 - [PRD V1.0 — 归档摘要](../../prd/HR制度智能问答系统-PRD-v1.0.md)
-- [RAG检索权限控制 PRD](../../prd/RAG检索权限控制-PRD-v0.1.md)
+- [RAG检索权限控制 PRD](../../prd/RAG检索权限控制-PRD-v1.0.md)
+- [RAG个人数据访问控制 PRD](../../prd/RAG个人数据访问控制-PRD-v1.0.md)
 - [需求调研报告](../../需求调研.md)
 - [系统架构设计说明书](../系统架构设计说明书.md)
 - [FastAPI 官方文档](https://fastapi.tiangolo.com/)
