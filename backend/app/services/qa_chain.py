@@ -22,6 +22,7 @@ from app.enums.constants import (
 )
 from app.models.faq import FAQ
 from app.models.document import Document
+from app.utils.snippet import generate_snippet, similarity_chinese
 
 
 @dataclass
@@ -79,7 +80,7 @@ class FAQMatcher(QAHandler):
 
         best, best_score = None, 0.0
         for faq in faqs:
-            score = self._similarity(ctx.processed_question, faq.question)
+            score = similarity_chinese(ctx.processed_question, faq.question)
             if score > best_score:
                 best_score = score
                 best = faq
@@ -95,12 +96,8 @@ class FAQMatcher(QAHandler):
 
     @staticmethod
     def _similarity(q1: str, q2: str) -> float:
-        def bigrams(s):
-            return set(s[i:i+2] for i in range(len(s)-1))
-        b1, b2 = bigrams(q1), bigrams(q2)
-        if not b1 or not b2:
-            return 0.0
-        return len(b1 & b2) / len(b1 | b2)
+        """FAQ 中文相似度（委托至公共工具模块）"""
+        return similarity_chinese(q1, q2)
 
 
 class RuleMatcher(QAHandler):
@@ -174,7 +171,7 @@ class SearchHandler(QAHandler):
         if allowed:
             snippets = []
             for doc in allowed:
-                snippet = self._generate_snippet(doc.content, ctx.processed_question)
+                snippet = generate_snippet(doc.content, ctx.processed_question)
                 snippets.append({
                     "document_id": doc.document_id,
                     "title": doc.title,
@@ -187,25 +184,6 @@ class SearchHandler(QAHandler):
             ctx.reference_docs = [{"doc_id": s["document_id"], "title": s["title"]} for s in snippets]
             ctx.is_done = True
         return await self.handle_next(ctx, db_session)
-
-    @staticmethod
-    def _generate_snippet(content: str, query: str) -> str:
-        idx = content.find(query)
-        if idx == -1:
-            for ch in query:
-                idx = content.find(ch)
-                if idx != -1:
-                    break
-        if idx == -1:
-            return content[:150] + "..."
-        start = max(0, idx - 50)
-        end = min(len(content), idx + 100)
-        snippet = content[start:end]
-        if start > 0:
-            snippet = "..." + snippet
-        if end < len(content):
-            snippet += "..."
-        return snippet
 
 
 class FallbackHandler(QAHandler):

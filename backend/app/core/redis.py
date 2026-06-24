@@ -42,9 +42,42 @@ async def check_redis_connection() -> bool:
 
 
 async def rate_limit_check(key: str, max_requests: int, window_seconds: int = 60) -> bool:
-    """使用滑动窗口限流，返回 True 表示允许"""
+    """滑动窗口限流器（基于 Sorted Set 实现），返回 True 表示允许。
+
+    使用毫秒级时间戳作为 score，每次请求：
+    1. 移除窗口外的旧记录
+    2. 检查当前窗口内请求数
+    3. 未超限则添加新记录并返回 True
+    """
+    import time
     r = await get_redis()
-    current = await r.incr(key)
-    if current == 1:
-        await r.expire(key, window_seconds)
-    return current <= max_requests
+    now_ms = int(time.time() * 1000)
+    window_start = now_ms - (window_seconds * 1000)
+
+    # Lua 脚本保证原子性：清理过期记录 → 计数 → 判断
+    lua_script = """
+    local key = KEYS[1]
+    local now = tonumber(ARGV[1])
+    local window_start = tonumber(ARGV[2])
+    local max_requests = tonumber(ARGV[3])
+    local window_seconds = tonumber(ARGV[4])
+
+    -- 1. 移除窗口外的记录
+    redis.call('ZREMRANGEBYSCORE', key, '-inf', window_start)
+
+    -- 2. 获取当前窗口内的请求数
+    local current = redis.call('ZCARD', key)
+
+    -- 3. 判断是否允许
+    if current < max_requests then
+        -- 使用纳秒级随机后缀避免同毫秒冲突
+        local member = now .. ':' .. redis.call('INCR', key .. ':counter')
+        redis.call('ZADD', key, now, member)
+        redis.call('EXPIRE', key, window_seconds * 2)
+        return 1
+    else
+        return 0
+    end
+    """
+    result = await r.eval(lua_script, 1, key, now_ms, window_start, max_requests, window_seconds)
+    return bool(result)

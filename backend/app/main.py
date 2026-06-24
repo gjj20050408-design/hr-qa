@@ -34,13 +34,18 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    logger.info("Creating database tables...")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables created")
 
     db_ok = await check_db_connection()
     logger.info(f"Database connection: {'OK' if db_ok else 'FAILED'}")
+
+    # 仅在 DEBUG 模式下自动建表（便于开发），生产环境请使用 Alembic 迁移
+    if settings.DEBUG:
+        logger.info("DEBUG mode: auto-creating database tables...")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables auto-created")
+    else:
+        logger.info("Production mode: skipping auto-create, use Alembic migrations")
 
     try:
         await init_redis()

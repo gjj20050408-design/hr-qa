@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.document import Document
 from app.enums.enums import DocStatus
 from app.services.qa_chain import PermissionFilter
+from app.utils.snippet import generate_snippet
 
 
 class SearchService:
@@ -38,7 +39,7 @@ class SearchService:
         # 生成高亮摘要
         items = []
         for doc in paged:
-            snippet = SearchService._generate_snippet(doc.content, keyword)
+            snippet = generate_snippet(doc.content, keyword)
             items.append({
                 "document_id": doc.document_id,
                 "title": doc.title,
@@ -52,21 +53,3 @@ class SearchService:
 
         return items, total, len(filtered)
 
-    @staticmethod
-    def _generate_snippet(content: str, query: str) -> str:
-        idx = content.find(query)
-        if idx == -1:
-            for ch in query:
-                idx = content.find(ch)
-                if idx != -1:
-                    break
-        if idx == -1:
-            return content[:150] + "..." if len(content) > 150 else content
-        start = max(0, idx - 50)
-        end = min(len(content), idx + 100)
-        snippet = content[start:end]
-        if start > 0:
-            snippet = "..." + snippet
-        if end < len(content):
-            snippet += "..."
-        return snippet
