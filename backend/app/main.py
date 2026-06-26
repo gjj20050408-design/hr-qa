@@ -1,5 +1,6 @@
 """FastAPI 主应用入口"""
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -64,6 +65,31 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables auto-created")
+
+        # 自动执行种子数据（部门、分类、默认管理员）
+        seed_file = os.path.join(os.path.dirname(__file__), "..", "init_db.sql")
+        if os.path.exists(seed_file):
+            # 先检查是否已有种子数据，避免重复插入
+            async with engine.connect() as conn:
+                result = await conn.execute(
+                    text("SELECT COUNT(*) FROM users WHERE user_id = 'user-admin-001'")
+                )
+                count = result.scalar()
+            if count == 0:
+                logger.info("DEBUG mode: seeding initial data...")
+                with open(seed_file, "r", encoding="utf-8") as f:
+                    sql_content = f.read()
+                # 提取所有 INSERT 语句执行（忽略注释和 CREATE 等）
+                for fragment in sql_content.split(";"):
+                    stmt = fragment.strip()
+                    insert_pos = stmt.upper().find("INSERT INTO")
+                    if insert_pos >= 0:
+                        stmt = stmt[insert_pos:]  # 去掉前面的注释
+                        async with engine.begin() as conn:
+                            await conn.execute(text(stmt))
+                logger.info("Seed data applied (admin: admin001 / Admin@123)")
+            else:
+                logger.info("Seed data already exists, skipping")
     else:
         logger.info("Production mode: skipping auto-create, use Alembic migrations")
 
