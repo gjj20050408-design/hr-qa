@@ -1,0 +1,110 @@
+/* ============================================================
+ * HR制度智能问答系统 - 全局样式
+ * 设计风格：Flat Design + 企业专业简约风
+ * ============================================================ */
+
+:root {
+  --primary: #0f172a;
+  --primary-light: #1e293b;
+  --primary-hover: #334155;
+  --accent: #0369a1;
+  --accent-light: #0284c7;
+  --accent-hover: #075985;
+  --surface: #f8fafc;
+  --surface-card: #ffffff;
+  --surface-muted: #f1f5f9;
+  --border: #e2e8f0;
+  --border-light: #f1f5f9;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  height: 100%;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+/* 通用 */
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 搜索高亮 */
+.search-highlight {
+  background: linear-gradient(transparent 60%, #fde68a 60%);
+  font-weight: 500;
+  color: #334155;
+}
+
+/* 聊天气泡 */
+.chat-bubble-user {
+  background: var(--accent);
+  color: white;
+  border-radius: 16px 16px 4px 16px;
+}
+.chat-bubble-ai {
+  background: var(--surface-muted);
+  color: #334155;
+  border-radius: 16px 16px 16px 4px;
+}
+
+/* 过渡动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Element Plus 覆盖 */
+.el-message {
+  z-index: 9999 !important;
+}

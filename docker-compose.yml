@@ -26,6 +26,9 @@ services:
       - "8000:8000"
     env_file:
       - ./backend/.env
+    environment:
+      - DB_HOST=mysql
+      - REDIS_HOST=redis
     depends_on:
       mysql:
         condition: service_healthy
@@ -87,6 +90,9 @@ services:
     command: celery -A app.tasks.celery_app worker --loglevel=info
     env_file:
       - ./backend/.env
+    environment:
+      - DB_HOST=mysql
+      - REDIS_HOST=redis
     depends_on:
       mysql:
         condition: service_healthy

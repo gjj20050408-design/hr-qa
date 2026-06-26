@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import engine, Base, check_db_connection
@@ -38,8 +40,26 @@ async def lifespan(app: FastAPI):
     db_ok = await check_db_connection()
     logger.info(f"Database connection: {'OK' if db_ok else 'FAILED'}")
 
-    # 仅在 DEBUG 模式下自动建表（便于开发），生产环境请使用 Alembic 迁移
+    # 仅在 DEBUG 模式下自动建库建表（便于开发），生产环境请使用 Alembic 迁移
     if settings.DEBUG:
+        if not db_ok:
+            # 数据库不存在，先创建数据库
+            logger.info("DEBUG mode: auto-creating database...")
+            db_creation_url = (
+                f"mysql+aiomysql://{settings.DB_USER}:{settings.DB_PASSWORD}"
+                f"@{settings.DB_HOST}:{settings.DB_PORT}"
+            )
+            temp_engine = create_async_engine(db_creation_url, echo=False)
+            try:
+                async with temp_engine.begin() as conn:
+                    await conn.execute(text(
+                        f"CREATE DATABASE IF NOT EXISTS {settings.DB_NAME} "
+                        "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+                    ))
+                logger.info(f"Database '{settings.DB_NAME}' auto-created")
+            finally:
+                await temp_engine.dispose()
+
         logger.info("DEBUG mode: auto-creating database tables...")
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
