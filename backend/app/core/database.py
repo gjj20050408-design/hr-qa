@@ -1,6 +1,7 @@
 """数据库连接管理模块"""
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import text
 from app.core.config import settings
 
 engine = create_async_engine(
@@ -41,7 +42,7 @@ async def check_db_connection() -> bool:
     """检查数据库连接是否正常"""
     try:
         async with engine.connect() as conn:
-            await conn.execute(await conn.get_execution_options())
+            await conn.execute(text("SELECT 1"))
         return True
     except Exception:
         return False
