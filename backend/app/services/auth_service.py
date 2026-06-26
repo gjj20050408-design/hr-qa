@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import (
@@ -84,9 +85,11 @@ class AuthService:
         account: str, password: str, db_session: AsyncSession,
         ip_address: str = None, user_agent: str = None,
     ) -> dict:
-        # 1. 查找用户
+        # 1. 查找用户（预加载 department 避免懒加载异步报错）
         result = await db_session.execute(
-            select(User).where(
+            select(User)
+            .options(selectinload(User.department))
+            .where(
                 (User.employee_id == account) | (User.email == account)
             )
         )
