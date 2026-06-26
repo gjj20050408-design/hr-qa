@@ -301,5 +301,5 @@ INSERT INTO categories (category_id, name, parent_id, type, access_level, sort_o
 -- 预置管理员账号 (密码: Admin@123, bcrypt hash)
 INSERT INTO users (user_id, employee_id, name, email, password_hash, role, department_id, hire_date, status) VALUES
 ('user-admin-001', 'admin001', '系统管理员', 'admin@company.com',
- '$2b$12$LJ3m4ys3Lk0TSwHCdPlnx.YXRZdU7qNBpcKXGkQeZVvMsVqQE8TeO',
+ '$2b$12$zzuv0xJuwBPysautmhBv9etU03pYXPb/dCUib67SD08RPA2cWH56O',
  'admin', 'dept-004', '2020-01-01', 'active');
