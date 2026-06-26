@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
     API_V1_PREFIX: str = "/api/v1"
+    CONDA_ENV_NAME: str = "hr-qa"  # 仅脚本使用
+    CONDA_BASE_PATH: str = ""  # 仅脚本使用
 
     # 数据库配置
     DB_HOST: str = "localhost"
@@ -31,6 +33,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
+    REDIS_SERVER_PATH: Optional[str] = None  # 仅脚本使用，启动本地 Redis 时读取
 
     @property
     def redis_url(self) -> str:
