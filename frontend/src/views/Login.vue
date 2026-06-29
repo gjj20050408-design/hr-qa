@@ -149,7 +149,7 @@
           </el-button>
         </el-form>
 
-        <p class="footer-text">预置管理员: admin001 / Admin@123</p>
+
       </div>
     </div>
   </div>
@@ -172,8 +172,8 @@ const registerFormRef = ref<FormInstance>()
 
 // 登录表单
 const loginForm = reactive({
-  account: 'admin001',
-  password: 'Admin@123',
+  account: '',
+  password: '',
   remember: false,
 })
 

@@ -33,56 +33,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { StarFilled } from '@element-plus/icons-vue'
 import type { QARecord } from '@/types'
 import { useChatStore } from '@/stores/chat'
+import { getQARecords } from '@/api/chat'
 import { ElMessage } from 'element-plus'
 
 const chatStore = useChatStore()
+const favorites = ref<QARecord[]>([])
 
-// Mock收藏数据
-const favorites = ref<QARecord[]>([
-  {
-    record_id: 'rec-001',
-    user_id: '',
-    session_id: '',
-    question: '加班费如何计算？',
-    answer: '工作日加班1.5倍，休息日2倍，法定节假日3倍工资。',
-    answer_type: 'faq',
-    confidence: 0,
-    reference_docs: [],
-    response_time_ms: 85,
-    is_favorite: true,
-    created_at: '昨天 15:30',
-  },
-  {
-    record_id: 'rec-002',
-    user_id: '',
-    session_id: '',
-    question: '年假如果今年没休完可以延到明年吗？',
-    answer: '当年未休完的年假可延期至次年3月31日，过期作废。',
-    answer_type: 'rule',
-    confidence: 0,
-    reference_docs: [],
-    response_time_ms: 120,
-    is_favorite: true,
-    created_at: '今天 10:35',
-  },
-  {
-    record_id: 'rec-003',
-    user_id: '',
-    session_id: '',
-    question: '婚假需要什么材料？',
-    answer: '需提供结婚证复印件，提前1个月申请。',
-    answer_type: 'faq',
-    confidence: 0,
-    reference_docs: [],
-    response_time_ms: 95,
-    is_favorite: true,
-    created_at: '6月20日',
-  },
-])
+async function loadFavorites() {
+  try {
+    // 加载所有收藏的问答记录
+    const res = await getQARecords({ page_size: 100 })
+    favorites.value = (res.data?.items || []).filter((r: any) => r.is_favorite)
+  } catch {}
+}
+
+onMounted(loadFavorites)
 
 function viewDetail(item: QARecord) {
   ElMessage.info('详情查看（功能待接入）')
@@ -90,7 +59,7 @@ function viewDetail(item: QARecord) {
 
 async function removeFav(item: QARecord) {
   try {
-    await chatStore.toggleFavorite(item.record_id)
+    await chatStore.toggleFavorite(item.record_id, false)
     favorites.value = favorites.value.filter(f => f.record_id !== item.record_id)
     ElMessage.success('已取消收藏')
   } catch {

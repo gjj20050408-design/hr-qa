@@ -16,8 +16,31 @@
           :class="{ active: chatStore.currentSessionId === session.session_id }"
           @click="chatStore.selectSession(session.session_id)"
         >
-          <p class="session-title">{{ session.title }}</p>
-          <p class="session-time">{{ session.created_at }}</p>
+          <div class="session-info">
+            <p class="session-title">{{ session.title }}</p>
+            <p class="session-time">{{ formatTime(session.created_at) }}</p>
+          </div>
+          <el-dropdown trigger="click" placement="bottom-end" @command="(cmd: string) => handleSessionAction(cmd, session)" @click.stop>
+            <el-button class="more-btn" link @click.stop>
+              <el-icon><MoreFilled /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu class="session-menu">
+                <el-dropdown-item command="rename">
+                  <el-icon><EditPen /></el-icon>
+                  <span>重命名</span>
+                </el-dropdown-item>
+                <el-dropdown-item command="pin">
+                  <el-icon><Star /></el-icon>
+                  <span>{{ session.is_pinned ? '取消置顶' : '置顶' }}</span>
+                </el-dropdown-item>
+                <el-dropdown-item command="delete" divided class="danger-item">
+                  <el-icon><Delete /></el-icon>
+                  <span>删除</span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
         <el-empty v-if="!chatStore.sessions.length" description="暂无会话" :image-size="60" />
       </div>
@@ -52,7 +75,8 @@
           <div v-else class="message-row assistant-row">
             <el-avatar :size="32" class="ai-avatar">AI</el-avatar>
             <div class="message-content">
-              <div class="message-bubble ai-bubble">
+              <div class="message-bubble ai-bubble" :class="{ 'permission-denied-bubble': msg.is_permission_denied }">
+                <div v-if="msg.is_permission_denied" class="permission-denied-icon">🔒 权限受限</div>
                 <div class="answer-text" v-html="formatAnswer(msg.content)"></div>
                 <div class="answer-source" v-if="msg.reference_docs?.length">
                   <span class="source-label">来源：{{ msg.reference_docs[0].title }}</span>
@@ -60,15 +84,15 @@
                 </div>
               </div>
 
-              <!-- 反馈按钮 -->
-              <div class="feedback-row" v-if="idx === chatStore.messages.length - 1 && msg.role === 'assistant'">
+              <!-- 反馈按钮（权限拒绝的回答不显示） -->
+              <div class="feedback-row" v-if="idx === chatStore.messages.length - 1 && msg.role === 'assistant' && !msg.is_permission_denied">
                 <el-button size="small" text @click="handleFeedback(msg.id, 'helpful')">
                   <el-icon><Pointer /></el-icon> 有帮助
                 </el-button>
                 <el-button size="small" text @click="handleFeedback(msg.id, 'not_helpful')">
                   <el-icon><Pointer /></el-icon> 无帮助
                 </el-button>
-                <el-button size="small" text @click="handleFavorite(msg.id)">
+                <el-button size="small" text @click="handleFavorite(msg.id, idx)">
                   <el-icon><Star /></el-icon> 收藏
                 </el-button>
               </div>
@@ -110,16 +134,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
-import { ElMessage } from 'element-plus'
-import { Plus, Delete, Pointer, Star, Loading, Position } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Delete, Pointer, Star, Loading, Position, MoreFilled, EditPen } from '@element-plus/icons-vue'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()
 const inputText = ref('')
 const messageListRef = ref<HTMLElement>()
+
+// 页面加载时获取会话列表
+onMounted(() => {
+  chatStore.loadSessions()
+})
 
 const currentSessionTitle = computed(() => {
   const session = chatStore.sessions.find(s => s.session_id === chatStore.currentSessionId)
@@ -142,6 +171,16 @@ function formatAnswer(text: string) {
     .replace(/\n/g, '<br>')
 }
 
+function formatTime(time: string) {
+  if (!time) return ''
+  try {
+    const d = new Date(time)
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  } catch {
+    return time
+  }
+}
+
 async function handleSend() {
   const text = inputText.value.trim()
   if (!text || chatStore.isLoading) return
@@ -151,7 +190,41 @@ async function handleSend() {
 
 function deleteCurrentSession() {
   if (chatStore.currentSessionId) {
-    chatStore.removeSession(chatStore.currentSessionId)
+    handleSessionAction('delete', chatStore.sessions.find(s => s.session_id === chatStore.currentSessionId) as any)
+  }
+}
+
+async function handleSessionAction(cmd: string, session: any) {
+  if (cmd === 'rename') {
+    try {
+      const { value } = await ElMessageBox.prompt('请输入新的会话名称', '重命名会话', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputValue: session.title,
+        inputPattern: /.+/,
+        inputErrorMessage: '名称不能为空',
+      })
+      const ok = await chatStore.renameSession(session.session_id, value)
+      ElMessage[ok ? 'success' : 'error'](ok ? '重命名成功' : '重命名失败')
+    } catch {
+      // 用户取消
+    }
+  } else if (cmd === 'pin') {
+    const isPinned = await chatStore.togglePinSession(session.session_id)
+    ElMessage.success(isPinned ? '已置顶' : '已取消置顶')
+  } else if (cmd === 'delete') {
+    try {
+      await ElMessageBox.confirm('确定删除该会话吗？所有对话记录将被清除。', '删除会话', {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+      })
+      await chatStore.removeSession(session.session_id)
+      ElMessage.success('会话已删除')
+    } catch {
+      // 用户取消
+    }
   }
 }
 
@@ -164,9 +237,12 @@ async function handleFeedback(recordId: string, feedback: 'helpful' | 'not_helpf
   }
 }
 
-async function handleFavorite(recordId: string) {
+async function handleFavorite(recordId: string, idx: number) {
   try {
-    const result = await chatStore.toggleFavorite(recordId)
+    const msg = chatStore.messages[idx]
+    const newState = !msg.is_favorite
+    const result = await chatStore.toggleFavorite(recordId, newState)
+    msg.is_favorite = result
     ElMessage.success(result ? '已收藏' : '已取消收藏')
   } catch {
     // ignore
@@ -212,6 +288,9 @@ async function handleFavorite(recordId: string) {
   padding: 8px;
 }
 .session-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: 10px 12px;
   border-radius: 8px;
   cursor: pointer;
@@ -223,6 +302,10 @@ async function handleFavorite(recordId: string) {
 }
 .session-item.active {
   background: rgba(3, 105, 161, 0.1);
+}
+.session-info {
+  flex: 1;
+  min-width: 0;
 }
 .session-title {
   font-size: 14px;
@@ -239,6 +322,20 @@ async function handleFavorite(recordId: string) {
   font-size: 12px;
   color: #94a3b8;
   margin-top: 2px;
+}
+.more-btn {
+  flex-shrink: 0;
+  padding: 4px;
+  color: #94a3b8;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.session-item:hover .more-btn,
+.session-item.active .more-btn {
+  opacity: 1;
+}
+.more-btn:hover {
+  color: var(--accent);
 }
 
 /* 右侧对话区 */
@@ -342,6 +439,19 @@ async function handleFavorite(recordId: string) {
   font-size: 12px;
 }
 
+.permission-denied-bubble {
+  background: #f1f5f9 !important;
+  border: 1px dashed #cbd5e1;
+}
+.permission-denied-icon {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .loading-indicator {
   display: flex;
   align-items: center;
@@ -375,5 +485,29 @@ async function handleFavorite(recordId: string) {
   color: #94a3b8;
   text-align: center;
   margin-top: 8px;
+}
+</style>
+
+<style>
+/* 会话下拉菜单样式（非 scoped，覆盖 element-plus） */
+.session-menu .el-dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+.session-menu .el-dropdown-menu__item .el-icon {
+  font-size: 16px;
+}
+.session-menu .danger-item {
+  color: #ef4444 !important;
+}
+.session-menu .danger-item .el-icon {
+  color: #ef4444 !important;
+}
+.session-menu .danger-item:hover {
+  background: #fef2f2 !important;
+  color: #ef4444 !important;
 }
 </style>

@@ -3,10 +3,10 @@ import type { ApiResponse, Document, SearchRequest, PaginatedData } from '@/type
 
 // 全文搜索
 export function searchDocuments(params: SearchRequest): Promise<ApiResponse<PaginatedData<Document>>> {
-  return request.get('/search', { params }).then(res => res.data)
+  return request.get('/search', { params })
 }
 
 // 获取文档详情
 export function getDocumentDetail(id: string): Promise<ApiResponse<Document>> {
-  return request.get(`/documents/${id}`).then(res => res.data)
+  return request.get(`/documents/${id}`)
 }

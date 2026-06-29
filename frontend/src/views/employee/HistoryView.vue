@@ -3,7 +3,7 @@
     <div class="history-header">
       <div>
         <h2>我的问答历史</h2>
-        <p>共 <strong>{{ filteredRecords.length }}</strong> 条记录</p>
+        <p>共 <strong>{{ displayTotal }}</strong> 条记录</p>
       </div>
       <div class="header-actions">
         <el-select v-model="typeFilter" size="small" class="filter-select">
@@ -51,14 +51,15 @@
 
       <el-empty v-if="!filteredRecords.length" description="暂无问答记录" :image-size="80" />
 
-      <div class="pagination-row" v-if="totalPages > 1">
+      <div class="pagination-row" v-if="displayTotal > pageSize">
         <el-pagination
           v-model:current-page="currentPage"
           :page-size="pageSize"
-          :total="filteredRecords.length"
+          :total="displayTotal"
           layout="prev, pager, next"
           size="small"
           background
+          @current-change="loadRecords"
         />
       </div>
     </div>
@@ -66,10 +67,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Search, StarFilled } from '@element-plus/icons-vue'
 import type { QARecord } from '@/types'
 import { useChatStore } from '@/stores/chat'
+import { getQARecords } from '@/api/chat'
 import { ElMessage } from 'element-plus'
 
 const chatStore = useChatStore()
@@ -78,77 +80,43 @@ const typeFilter = ref('all')
 const expandedId = ref<string>('')
 const currentPage = ref(1)
 const pageSize = ref(10)
+const records = ref<QARecord[]>([])
+const total = ref(0)
 
-// Mock数据
-const records = ref<QARecord[]>([
-  {
-    record_id: 'rec-001',
-    user_id: '',
-    session_id: '',
-    question: '我的工龄是3年，请问我有多少天年假？',
-    answer: '根据规定，您的工龄3年属于"满1年不满10年"，每年享有5天带薪年假。',
-    answer_type: 'rule',
-    confidence: 0,
-    reference_docs: [],
-    response_time_ms: 120,
-    is_favorite: true,
-    created_at: '2026-06-24 10:30',
-  },
-  {
-    record_id: 'rec-002',
-    user_id: '',
-    session_id: '',
-    question: '加班费如何计算？',
-    answer: '工作日加班1.5倍，休息日2倍，法定节假日3倍工资。加班需提前申请并经主管审批通过。',
-    answer_type: 'faq',
-    confidence: 0,
-    reference_docs: [],
-    response_time_ms: 85,
-    is_favorite: false,
-    created_at: '2026-06-23 15:22',
-  },
-  {
-    record_id: 'rec-003',
-    user_id: '',
-    session_id: '',
-    question: '婚假需要满足什么条件？',
-    answer: '符合法定年龄可享受3天婚假，晚婚额外7天共10天。需提供结婚证复印件，提前1个月申请。',
-    answer_type: 'faq',
-    confidence: 0,
-    reference_docs: [],
-    response_time_ms: 95,
-    is_favorite: false,
-    created_at: '2026-06-20',
-  },
-  {
-    record_id: 'rec-004',
-    user_id: '',
-    session_id: '',
-    question: '绩效考核的标准是什么？',
-    answer: '绩效考核按季度进行，每年4次。评分标准包括工作业绩、能力素质、团队协作三个维度。',
-    answer_type: 'search',
-    confidence: 0,
-    reference_docs: [],
-    response_time_ms: 250,
-    is_favorite: false,
-    created_at: '2026-06-18',
-  },
-])
+async function loadRecords() {
+  try {
+    const params: any = { page: currentPage.value, page_size: pageSize.value }
+    if (typeFilter.value !== 'all') params.answer_type = typeFilter.value
+    const res = await getQARecords(params)
+    records.value = res.data?.items || []
+    total.value = res.data?.pagination?.total || 0
+  } catch {}
+}
+
+onMounted(loadRecords)
+
+// 类型筛选变更时重新加载
+watch(typeFilter, () => {
+  currentPage.value = 1
+  loadRecords()
+})
 
 const filteredRecords = computed(() => {
-  return records.value.filter(r => {
-    const typeMatch = typeFilter.value === 'all' || r.answer_type === typeFilter.value
-    const searchMatch = !searchText.value || r.question.includes(searchText.value)
-    return typeMatch && searchMatch
-  })
+  if (!searchText.value) return records.value
+  return records.value.filter(r => r.question.includes(searchText.value))
 })
-
-const totalPages = computed(() => Math.ceil(filteredRecords.value.length / pageSize.value))
 
 const paginatedRecords = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredRecords.value.slice(start, start + pageSize.value)
+  // 有搜索文本时使用客户端分页，否则直接显示API已分页的数据
+  if (searchText.value) {
+    const start = (currentPage.value - 1) * pageSize.value
+    return filteredRecords.value.slice(start, start + pageSize.value)
+  }
+  return filteredRecords.value
 })
+
+// 搜索时用客户端过滤后的总数，否则用API返回的总数
+const displayTotal = computed(() => searchText.value ? filteredRecords.value.length : total.value)
 
 function typeLabel(t: string) {
   const map: Record<string, string> = { faq: 'FAQ匹配', rule: '规则匹配', search: '全文搜索', rag: 'RAG问答', no_result: '未找到' }
@@ -166,7 +134,8 @@ function expandRecord(record: QARecord) {
 
 async function toggleFav(record: QARecord) {
   try {
-    const result = await chatStore.toggleFavorite(record.record_id)
+    const newState = !record.is_favorite
+    const result = await chatStore.toggleFavorite(record.record_id, newState)
     record.is_favorite = result
     ElMessage.success(result ? '已收藏' : '已取消')
   } catch {

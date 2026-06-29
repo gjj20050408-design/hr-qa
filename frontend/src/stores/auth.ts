@@ -65,6 +65,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   // 从localStorage恢复用户信息
   function restoreUser() {
+    const token = localStorage.getItem('access_token')
+    if (token) {
+      accessToken.value = token
+    }
     const stored = localStorage.getItem('user_info')
     if (stored) {
       try {

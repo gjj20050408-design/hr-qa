@@ -30,7 +30,7 @@
           </el-avatar>
           <div class="user-detail">
             <span class="user-name">{{ authStore.user?.name }}</span>
-            <span class="user-role">普通员工</span>
+            <span class="user-role">{{ roleLabel }}</span>
           </div>
         </div>
         <el-dropdown trigger="click" @command="handleCommand">
@@ -60,9 +60,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { getNotifications } from '@/api/notification'
 import { Document, Bell, ArrowDown } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -78,12 +79,32 @@ const tabs = [
   { key: 'favorites', label: '我的收藏', route: '/employee/favorites' },
 ]
 
+const roleLabel = computed(() => {
+  const roleMap: Record<string, string> = {
+    admin: '管理员',
+    hr_specialist: 'HR专员',
+    employee: '普通员工',
+    manager: '部门经理',
+  }
+  return roleMap[authStore.user?.role || ''] || '普通员工'
+})
+
 const currentView = computed(() => {
   const path = route.path.split('/').pop() || 'search'
   return path
 })
 
-const unreadCount = computed(() => 3) // TODO: from API
+const unreadCount = ref(0)
+
+async function loadUnreadCount() {
+  try {
+    const res = await getNotifications({ page_size: 100 })
+    const items = res.data?.items || []
+    unreadCount.value = items.filter((n: any) => !n.is_read).length
+  } catch {}
+}
+
+onMounted(loadUnreadCount)
 
 function navigate(key: string) {
   const tab = tabs.find(t => t.key === key)

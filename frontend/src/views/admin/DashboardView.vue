@@ -64,9 +64,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, reactive } from 'vue'
 import * as echarts from 'echarts'
 import { ChatDotRound, UserFilled, Files, QuestionFilled } from '@element-plus/icons-vue'
+import { getDashboard } from '@/api/admin'
 
 const trendChartRef = ref<HTMLElement>()
 const pieChartRef = ref<HTMLElement>()
@@ -76,55 +77,73 @@ let trendChart: echarts.ECharts | null = null
 let pieChart: echarts.ECharts | null = null
 let categoryChart: echarts.ECharts | null = null
 
-const statCards = [
-  {
-    label: '今日问答', value: '1,247', change: '↑ 12.5% 较昨日', changeType: 'up',
-    icon: ChatDotRound, iconBg: '#eff6ff', iconColor: '#3b82f6',
-  },
-  {
-    label: '活跃用户', value: '328', change: '↑ 8.3% 较昨日', changeType: 'up',
-    icon: UserFilled, iconBg: '#f0fdf4', iconColor: '#10b981',
-  },
-  {
-    label: '制度文档', value: '86', change: '已发布 72 · 草稿 14', changeType: 'info',
-    icon: Files, iconBg: '#faf5ff', iconColor: '#8b5cf6',
-  },
-  {
-    label: 'FAQ条目', value: '145', change: '活跃 138 · 归档 7', changeType: 'info',
-    icon: QuestionFilled, iconBg: '#fffbeb', iconColor: '#f59e0b',
-  },
-]
+const statCards = reactive([
+  { label: '今日问答', value: 0, change: '加载中...', changeType: 'info', icon: ChatDotRound, iconBg: '#eff6ff', iconColor: '#3b82f6' },
+  { label: '活跃用户', value: 0, change: '加载中...', changeType: 'info', icon: UserFilled, iconBg: '#f0fdf4', iconColor: '#10b981' },
+  { label: '制度文档', value: 0, change: '加载中...', changeType: 'info', icon: Files, iconBg: '#faf5ff', iconColor: '#8b5cf6' },
+  { label: 'FAQ条目', value: 0, change: '加载中...', changeType: 'info', icon: QuestionFilled, iconBg: '#fffbeb', iconColor: '#f59e0b' },
+])
 
-const hotQuestions = [
-  { question: '年假有多少天？', count: 1234, percent: '85%' },
-  { question: '加班费怎么算？', count: 987, percent: '68%' },
-  { question: '婚假几天？', count: 756, percent: '52%' },
-  { question: '体检什么时间？', count: 543, percent: '38%' },
-  { question: '绩效考核标准？', count: 432, percent: '30%' },
-]
+const hotQuestions = ref<any[]>([])
+const dashboardData = ref<any>(null)
+
+async function loadDashboard() {
+  try {
+    const res = await getDashboard('7d')
+    const d = res.data || {}
+    dashboardData.value = d
+    statCards[0].value = d.total_questions || 0
+    statCards[1].value = d.active_users || 0
+    statCards[2].value = d.total_documents || 0
+    statCards[3].value = d.total_faqs || 0
+    if (d.daily_trend) {
+      statCards[0].change = d.today_questions ? `今日 ${d.today_questions} 次` : '加载中...'
+    }
+    if (d.hot_topics) {
+      const maxCount = Math.max(...d.hot_topics.map((h: any) => h.count || 0), 1)
+      hotQuestions.value = d.hot_topics.map((h: any) => ({
+        question: h.topic || h.keyword || '',
+        count: h.count || 0,
+        percent: Math.round((h.count || 0) / maxCount * 100) + '%',
+      }))
+    }
+    await nextTick()
+    refreshCharts()
+  } catch {
+    // 使用默认数据
+    statCards[0].value = 0; statCards[1].value = 0
+    statCards[2].value = 0; statCards[3].value = 0
+  }
+}
+
+function refreshCharts() {
+  if (trendChart) trendChart.dispose()
+  if (pieChart) pieChart.dispose()
+  if (categoryChart) categoryChart.dispose()
+  initTrendChart()
+  initPieChart()
+  initCategoryChart()
+}
 
 function initTrendChart() {
   if (!trendChartRef.value) return
   trendChart = echarts.init(trendChartRef.value)
+  const d = dashboardData.value
+  const dates = d?.daily_trend?.map((t: any) => t.date) || []
+  const values = d?.daily_trend?.map((t: any) => t.count) || []
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
     grid: { left: 40, right: 20, top: 10, bottom: 30 },
-    xAxis: {
-      type: 'category',
-      data: ['06/18', '06/19', '06/20', '06/21', '06/22', '06/23', '06/24'],
-    },
+    xAxis: { type: 'category', data: dates.length ? dates : ['暂无数据'] },
     yAxis: { type: 'value' },
     series: [{
-      type: 'line',
-      smooth: true,
-      data: [820, 932, 901, 1134, 1023, 1190, 1247],
+      type: 'line', smooth: true,
+      data: values.length ? values : [0],
       itemStyle: { color: '#0369a1' },
-      areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(3,105,161,0.3)' },
-          { offset: 1, color: 'rgba(3,105,161,0.02)' },
-        ]),
-      },
+      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: 'rgba(3,105,161,0.3)' },
+        { offset: 1, color: 'rgba(3,105,161,0.02)' },
+      ])},
     }],
   })
 }
@@ -132,20 +151,20 @@ function initTrendChart() {
 function initPieChart() {
   if (!pieChartRef.value) return
   pieChart = echarts.init(pieChartRef.value)
+  const d = dashboardData.value
+  const typeDist = d?.type_distribution || {}
+  const pieData = Object.entries(typeDist).map(([name, value]) => ({
+    name: { faq: 'FAQ匹配', search: '全文搜索', rule: '规则匹配', rag: 'RAG', no_result: '未找到' }[name] || name,
+    value,
+    itemStyle: { color: { faq: '#10b981', search: '#0369a1', rule: '#f59e0b', rag: '#8b5cf6', no_result: '#ef4444' }[name] || '#94a3b8' },
+  }))
   pieChart.setOption({
     tooltip: { trigger: 'item' },
     legend: { bottom: 0 },
     series: [{
-      type: 'pie',
-      radius: ['50%', '75%'],
-      center: ['50%', '45%'],
+      type: 'pie', radius: ['50%', '75%'], center: ['50%', '45%'],
       label: { show: false },
-      data: [
-        { value: 45, name: 'FAQ匹配', itemStyle: { color: '#10b981' } },
-        { value: 30, name: '全文搜索', itemStyle: { color: '#0369a1' } },
-        { value: 15, name: '规则匹配', itemStyle: { color: '#f59e0b' } },
-        { value: 10, name: '未找到', itemStyle: { color: '#ef4444' } },
-      ],
+      data: pieData.length ? pieData : [{ value: 1, name: '暂无数据', itemStyle: { color: '#e2e8f0' } }],
     }],
   })
 }
@@ -153,17 +172,17 @@ function initPieChart() {
 function initCategoryChart() {
   if (!categoryChartRef.value) return
   categoryChart = echarts.init(categoryChartRef.value)
+  const d = dashboardData.value
+  const catDist = d?.category_distribution || {}
+  const catData = Object.entries(catDist).map(([name, value]) => [name, value])
   categoryChart.setOption({
     tooltip: { trigger: 'axis' },
     grid: { left: 100, right: 20, top: 10, bottom: 20 },
     xAxis: { type: 'value' },
-    yAxis: {
-      type: 'category',
-      data: ['考勤', '薪酬', '福利', '休假', '绩效'],
-    },
+    yAxis: { type: 'category', data: catData.map(c => c[0]) },
     series: [{
       type: 'bar',
-      data: [95, 78, 88, 92, 65],
+      data: catData.map(c => c[1]),
       itemStyle: { color: '#0369a1', borderRadius: [0, 4, 4, 0] },
       barMaxWidth: 20,
     }],
@@ -171,11 +190,7 @@ function initCategoryChart() {
 }
 
 onMounted(async () => {
-  await nextTick()
-  initTrendChart()
-  initPieChart()
-  initCategoryChart()
-
+  await loadDashboard()
   window.addEventListener('resize', handleResize)
 })
 
