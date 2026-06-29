@@ -6,6 +6,7 @@ from app.models.document import Document
 from app.models.document_sub import DocumentVersion, DocumentChunk
 from app.models.faq import FAQ
 from app.models.qa_record import QARecord
+from app.models.chat_session import ChatSession
 from app.models.correction import CorrectionRequest
 from app.models.announcement import Announcement, AnnouncementRead
 from app.models.audit_log import AuditLog
@@ -20,6 +21,7 @@ __all__ = [
     "DocumentChunk",
     "FAQ",
     "QARecord",
+    "ChatSession",
     "CorrectionRequest",
     "Announcement",
     "AnnouncementRead",

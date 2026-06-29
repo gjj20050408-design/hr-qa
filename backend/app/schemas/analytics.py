@@ -1,5 +1,5 @@
 """数据统计相关 Schema"""
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -18,4 +18,9 @@ class DashboardStatsResponse(BaseModel):
     answer_type_distribution: Optional[dict] = None
     daily_trend: Optional[list] = None
     hot_topics: Optional[list] = None
+    hot_search_terms: Optional[List[dict]] = None
     category_distribution: Optional[list] = None
+    total_documents: int = 0
+    total_categories: int = 0
+    total_users: int = 0
+    correction_stats: Optional[dict] = None

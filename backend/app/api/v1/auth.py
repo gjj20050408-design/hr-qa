@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.redis import rate_limit_check
+from app.core.security import get_current_user, require_hr_plus
 from app.schemas.auth import (
     RegisterRequest, LoginRequest, RefreshTokenRequest, ChangePasswordRequest,
 )
@@ -38,6 +39,10 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """用户登录"""
     try:
+        # 登录限流：同一账号每60秒最多5次
+        if not await rate_limit_check(f"rate:login:{req.account}", 5):
+            raise HTTPException(status_code=429, detail=error_response(10006, "请求过于频繁，请稍后再试"))
+
         result = await AuthService.login(
             account=req.account,
             password=req.password,
@@ -98,15 +103,12 @@ async def change_password(
 @router.get(f"{USER_PREFIX}")
 async def list_users(
     page: int = 1, page_size: int = 20,
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_hr_plus),
     db: AsyncSession = Depends(get_db),
 ):
     """管理员查看用户列表"""
     from app.models.user import User
     from sqlalchemy import select, func
-
-    if current_user.role.value not in ("admin", "hr_specialist"):
-        raise HTTPException(status_code=403, detail=error_response(10003, "无权限"))
 
     result = await db.execute(select(func.count(User.user_id)))
     total = result.scalar() or 0

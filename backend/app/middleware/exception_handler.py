@@ -2,7 +2,7 @@
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from app.schemas.response import error_response
-from datetime import datetime
+from datetime import datetime, timezone
 import traceback
 import logging
 
@@ -31,16 +31,16 @@ async def global_exception_handler(request: Request, exc: Exception):
             "message": "服务器内部错误",
             "data": None,
             "request_id": getattr(request.state, "request_id", None),
-            "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
     )
 
 
 async def validation_exception_handler(request: Request, exc: Exception):
     """Pydantic 校验异常处理"""
-    from pydantic import ValidationError
+    from fastapi.exceptions import RequestValidationError
 
-    if isinstance(exc, ValidationError):
+    if isinstance(exc, RequestValidationError):
         errors = []
         for error in exc.errors():
             errors.append({
@@ -48,13 +48,13 @@ async def validation_exception_handler(request: Request, exc: Exception):
                 "message": error["msg"],
             })
         return JSONResponse(
-            status_code=400,
+            status_code=422,
             content={
                 "code": 90001,
-                "message": f"请求参数校验失败",
+                "message": "请求参数校验失败",
                 "data": {"errors": errors},
                 "request_id": getattr(request.state, "request_id", None),
-                "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
     return None

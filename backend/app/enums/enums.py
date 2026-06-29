@@ -103,3 +103,4 @@ class QueryType(str, Enum):
     PERSONAL_DATA = "personal_data"
     MIXED = "mixed"
     AGGREGATION = "aggregation"
+    CHITCHAT = "chitchat"

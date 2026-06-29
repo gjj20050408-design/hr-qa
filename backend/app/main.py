@@ -1,6 +1,9 @@
 """FastAPI 主应用入口"""
 import logging
 import os
+import socket
+import subprocess
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +33,84 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _is_port_open(host: str, port: int, timeout: float = 2.0) -> bool:
+    """检测指定端口是否已被占用（即服务是否已启动）"""
+    try:
+        sock = socket.create_connection((host, port), timeout=timeout)
+        sock.close()
+        return True
+    except (OSError, ConnectionRefusedError):
+        return False
+
+
+def _start_redis() -> bool:
+    """尝试自动启动 Redis 服务"""
+    # 先检查端口是否已打开
+    if _is_port_open(settings.REDIS_HOST, settings.REDIS_PORT):
+        logger.info(f"Redis already running on {settings.REDIS_HOST}:{settings.REDIS_PORT}")
+        return True
+
+    if not settings.REDIS_AUTO_START:
+        return False
+
+    redis_path = settings.REDIS_SERVER_PATH
+    logger.info(f"Attempting to auto-start Redis: {redis_path}")
+    try:
+        subprocess.Popen(
+            [redis_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        logger.info(f"Redis auto-start command sent (port {settings.REDIS_PORT})")
+        return True
+    except FileNotFoundError:
+        logger.warning(
+            f"Redis executable not found at '{redis_path}'. "
+            "Please install Redis or set REDIS_SERVER_PATH to the correct path."
+        )
+    except Exception as e:
+        logger.warning(f"Failed to auto-start Redis: {e}")
+    return False
+
+
+def _init_providers():
+    """初始化 RAG 相关提供者（LLM/Embedding/VectorStore）"""
+    try:
+        # LLM 初始化（DeepSeek）
+        llm_key = settings.LLM_API_KEY or ""
+        llm_url = settings.LLM_BASE_URL or ""
+        llm_model = settings.LLM_MODEL
+        if llm_key and llm_url:
+            from app.providers.llm import init_llm_provider
+            init_llm_provider(
+                api_key=llm_key,
+                base_url=llm_url,
+                model=llm_model,
+                failure_threshold=settings.LLM_CIRCUIT_BREAKER_FAILURES,
+                timeout_seconds=settings.LLM_CIRCUIT_BREAKER_TIMEOUT,
+            )
+        else:
+            logger.warning("LLM provider not configured (LLM_API_KEY/LLM_BASE_URL empty)")
+
+        # Embedding 初始化（阿里云 DashScope）
+        emb_key = settings.EMBEDDING_API_KEY or ""
+        emb_url = settings.EMBEDDING_BASE_URL or ""
+        emb_model = settings.EMBEDDING_MODEL
+        if emb_key and emb_url:
+            from app.providers.embedding import init_embedding_provider
+            init_embedding_provider(api_key=emb_key, base_url=emb_url, model=emb_model)
+        else:
+            logger.warning("Embedding provider not configured (EMBEDDING_API_KEY empty), RAG disabled")
+
+        # 向量库初始化（本地 SQLite 持久化，无需 ChromaDB 服务）
+        from app.providers.vector_store import init_vector_store
+        init_vector_store(use_local=True, local_db_path="./data/vectors.db")
+
+    except Exception as e:
+        logger.warning(f"Provider initialization skipped: {e}")
 
 
 @asynccontextmanager
@@ -90,14 +171,57 @@ async def lifespan(app: FastAPI):
                 logger.info("Seed data applied (admin: admin001 / Admin@123)")
             else:
                 logger.info("Seed data already exists, skipping")
+
+            # 确保管理员密码哈希有效（修复旧数据中可能无效的hash）
+            try:
+                async with engine.connect() as conn:
+                    result = await conn.execute(
+                        text(
+                            "SELECT password_hash FROM users WHERE user_id = 'user-admin-001'"
+                        )
+                    )
+                    row = result.fetchone()
+                if row:
+                    import bcrypt
+                    try:
+                        valid = bcrypt.checkpw("Admin@123".encode(), row[0].encode())
+                    except Exception:
+                        valid = False
+                    if not valid:
+                        correct_hash = bcrypt.hashpw(
+                            "Admin@123".encode(), bcrypt.gensalt(rounds=12)
+                        ).decode()
+                        async with engine.begin() as conn:
+                            await conn.execute(
+                                text(
+                                    "UPDATE users SET password_hash = :pw "
+                                    "WHERE user_id = 'user-admin-001'"
+                                ),
+                                {"pw": correct_hash},
+                            )
+                        logger.info("Admin password hash repaired")
+            except Exception as e:
+                logger.warning(f"Admin password hash check skipped: {e}")
     else:
         logger.info("Production mode: skipping auto-create, use Alembic migrations")
 
     try:
         await init_redis()
         logger.info("Redis connected")
-    except Exception as e:
-        logger.warning(f"Redis connection failed: {e}")
+    except Exception:
+        logger.info("Redis not running, attempting auto-start...")
+        if _start_redis():
+            # 重试连接
+            try:
+                await init_redis()
+                logger.info("Redis connected after auto-start")
+            except Exception as e:
+                logger.warning(f"Redis still unreachable after auto-start: {e}")
+        else:
+            logger.warning("Redis unavailable; rate limiting will be disabled")
+
+    # 初始化 RAG 提供者（LLM/Embedding/ChromaDB）
+    _init_providers()
 
     yield
 

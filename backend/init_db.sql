@@ -142,7 +142,21 @@ CREATE TABLE IF NOT EXISTS faqs (
         ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='FAQ表';
 
--- 8. 问答记录表
+-- 8. 会话表
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    session_id      VARCHAR(64)   NOT NULL PRIMARY KEY COMMENT '会话ID(UUID)',
+    user_id         VARCHAR(64)   NOT NULL COMMENT '用户ID',
+    title           VARCHAR(200)  NULL COMMENT '会话标题(默认取首条问题)',
+    is_pinned       TINYINT(1)    DEFAULT 0 COMMENT '是否置顶',
+    created_at      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_chat_user (user_id),
+    INDEX idx_chat_pinned (is_pinned),
+    CONSTRAINT fk_chat_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='会话表';
+
+-- 9. 问答记录表
 CREATE TABLE IF NOT EXISTS qa_records (
     record_id       VARCHAR(64)   NOT NULL PRIMARY KEY COMMENT '记录ID(UUID)',
     user_id         VARCHAR(64)   NOT NULL COMMENT '提问用户ID',
@@ -301,5 +315,24 @@ INSERT INTO categories (category_id, name, parent_id, type, access_level, sort_o
 -- 预置管理员账号 (密码: Admin@123, bcrypt hash)
 INSERT INTO users (user_id, employee_id, name, email, password_hash, role, department_id, hire_date, status) VALUES
 ('user-admin-001', 'admin001', '系统管理员', 'admin@company.com',
- '$2b$12$zzuv0xJuwBPysautmhBv9etU03pYXPb/dCUib67SD08RPA2cWH56O',
+ '$2b$12$lsXQnZBZ.65gdiE1R0wOsO8bfjoGa8/M2kY.VHCqWy4cmk8jQLm0u',
  'admin', 'dept-004', '2020-01-01', 'active');
+
+-- 员工数据敏感度配置（16个预设字段，三级敏感度）
+INSERT INTO employee_data_sensitivity (field_name, field_label, sensitivity_level, source_table, source_column, is_active) VALUES
+('employee_id', '工号', 'public', 'users', 'employee_id', 1),
+('name', '姓名', 'public', 'users', 'name', 1),
+('department_name', '部门', 'public', 'users', 'department_id', 1),
+('job_title', '岗位名称', 'public', 'users', '', 1),
+('job_level', '职级', 'department', 'users', 'job_level', 1),
+('hire_date', '入职日期', 'department', 'users', 'hire_date', 1),
+('work_location', '工作地', 'public', 'users', 'work_location', 1),
+('email', '邮箱', 'department', 'users', 'email', 1),
+('phone', '手机号', 'private', 'users', 'phone', 1),
+('marital_status', '婚姻状况', 'private', 'users', 'marital_status', 1),
+('manager_name', '直属上级', 'department', 'users', '', 1),
+('work_years', '工龄', 'department', 'users', '', 1),
+('salary', '工资', 'private', 'users', '', 0),
+('bonus', '奖金', 'private', 'users', '', 0),
+('performance_grade', '绩效等级', 'private', 'users', '', 0),
+('id_card', '身份证号', 'private', 'users', '', 0);

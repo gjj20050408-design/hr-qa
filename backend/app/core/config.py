@@ -83,8 +83,25 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000", "http://localhost:80"]
 
+    # Redis 自动启动配置（Windows 本地开发）
+    REDIS_AUTO_START: bool = False  # 设为 True 以在启动时自动拉起 Redis
+    REDIS_SERVER_PATH: str = "redis-server.exe"  # redis-server 路径，支持 PATH 中的命令
+
     # 日志
     LOG_LEVEL: str = "DEBUG"
+
+    # LLM / Embedding / ChromaDB 配置
+    LLM_API_KEY: Optional[str] = None
+    LLM_BASE_URL: Optional[str] = None
+    LLM_MODEL: str = "qwen-turbo"
+    EMBEDDING_API_KEY: Optional[str] = None
+    EMBEDDING_BASE_URL: Optional[str] = None
+    EMBEDDING_MODEL: str = "text-embedding-v3"
+    # 本地 Embedding 配置（use_local=true 时使用本地模型，无需 API Key）
+    EMBEDDING_USE_LOCAL: bool = True
+    EMBEDDING_LOCAL_MODEL: str = "BAAI/bge-small-zh-v1.5"
+    CHROMA_HOST: str = "localhost"
+    CHROMA_PORT: int = 8001
 
     class Config:
         env_file = ".env"

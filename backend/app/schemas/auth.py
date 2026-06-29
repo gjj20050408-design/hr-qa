@@ -52,6 +52,20 @@ class ChangePasswordRequest(BaseModel):
     old_password: str = Field(..., description="旧密码")
     new_password: str = Field(..., min_length=8, description="新密码")
 
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        if len(v) < PASSWORD_POLICY["min_length"]:
+            raise ValueError(f"密码长度不少于{PASSWORD_POLICY['min_length']}位")
+        checks = [
+            any(c.isupper() for c in v),
+            any(c.islower() for c in v),
+            any(c.isdigit() for c in v),
+        ]
+        if not all(checks):
+            raise ValueError("密码需包含大写字母、小写字母和数字")
+        return v
+
 
 class TokenResponse(BaseModel):
     """Token 响应"""
