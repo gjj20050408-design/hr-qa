@@ -15,15 +15,20 @@ class SearchService:
         keyword: str, user_role, db_session: AsyncSession,
         page: int = 1, page_size: int = 20, category_id: str = None,
     ) -> tuple:
-        # 用 LIKE 模糊匹配（中文场景比 FULLTEXT 更稳定）
-        kw = f"%{keyword}%"
         conditions = [
             Document.status == DocStatus.PUBLISHED,
-            or_(
-                Document.title.like(kw),
-                Document.content.like(kw),
-            ),
         ]
+
+        # 有关键词时用 LIKE 模糊匹配；空关键词时列出全部已发布文档
+        if keyword and keyword.strip():
+            kw = f"%{keyword.strip()}%"
+            conditions.append(
+                or_(
+                    Document.title.like(kw),
+                    Document.content.like(kw),
+                )
+            )
+
         if category_id:
             conditions.append(Document.category_id == category_id)
 

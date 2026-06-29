@@ -143,7 +143,14 @@ class DocumentService:
 
     @staticmethod
     async def get_document_detail(document_id: str, db_session: AsyncSession) -> Document:
-        doc = await db_session.get(Document, document_id)
+        from sqlalchemy.orm import selectinload
+        from sqlalchemy import select
+        result = await db_session.execute(
+            select(Document)
+            .options(selectinload(Document.category), selectinload(Document.uploader))
+            .where(Document.document_id == document_id)
+        )
+        doc = result.scalar_one_or_none()
         if not doc:
             raise ValueError("文档不存在")
         return doc

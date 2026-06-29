@@ -80,7 +80,7 @@
                 <div class="answer-text" v-html="formatAnswer(msg.content)"></div>
                 <div class="answer-source" v-if="msg.reference_docs?.length">
                   <span class="source-label">来源：{{ msg.reference_docs[0].title }}</span>
-                  <span class="source-time">响应：{{ msg.response_time_ms }}ms</span>
+                  <span class="source-time">响应：{{ (msg.response_time_ms / 1000).toFixed(2) }}s</span>
                 </div>
               </div>
 

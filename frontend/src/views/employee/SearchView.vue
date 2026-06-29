@@ -63,7 +63,7 @@
           </div>
         </div>
 
-        <el-empty v-if="!results.length && keyword && !notice" description="未找到相关制度" />
+        <el-empty v-if="!results.length && !notice && !searching" description="暂无制度文档" />
         <div v-if="!results.length && notice" class="filter-notice-full">
           🔒 {{ notice }}
         </div>
@@ -106,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { searchDocuments, getDocumentDetail } from '@/api/search'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -172,11 +172,10 @@ async function loadCategories() {
 }
 
 async function doSearch() {
-  if (!keyword.value.trim()) return
   searching.value = true
   try {
     const res = await searchDocuments({
-      keyword: keyword.value,
+      keyword: keyword.value.trim() || '',
       category_id: selectedCategory.value || undefined,
       page: currentPage.value,
       page_size: pageSize.value,
@@ -225,6 +224,13 @@ function openCorrectionDialog() {
 
 onMounted(() => {
   loadCategories()
+  doSearch()  // 进入页面时自动加载全部文档
+})
+
+// 切换分类标签时自动搜索
+watch(selectedCategory, () => {
+  currentPage.value = 1
+  doSearch()
 })
 </script>
 

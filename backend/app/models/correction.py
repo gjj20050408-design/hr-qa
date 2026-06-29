@@ -16,7 +16,7 @@ class CorrectionRequest(Base):
     description = Column(Text, nullable=False)
     submitted_by = Column(String(64), ForeignKey("users.user_id"), nullable=False)
     reviewed_by = Column(String(64), ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
-    status = Column(Enum(CorrectionStatus), nullable=False, default=CorrectionStatus.PENDING)
+    status = Column(Enum(CorrectionStatus, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=CorrectionStatus.PENDING)
     review_comment = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     reviewed_at = Column(DateTime, nullable=True)

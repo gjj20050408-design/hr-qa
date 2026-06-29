@@ -17,7 +17,7 @@ class FAQ(Base):
     related_doc_id = Column(String(64), ForeignKey("documents.document_id", ondelete="SET NULL"), nullable=True)
     keywords = Column(String(500), nullable=True)
     view_count = Column(Integer, default=0)
-    status = Column(Enum(FAQStatus), nullable=False, default=FAQStatus.ACTIVE)
+    status = Column(Enum(FAQStatus, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=FAQStatus.ACTIVE)
     created_by = Column(String(64), ForeignKey("users.user_id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

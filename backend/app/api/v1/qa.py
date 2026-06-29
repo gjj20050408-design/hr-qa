@@ -27,7 +27,7 @@ router = APIRouter(tags=["搜索与问答"])
 
 @router.get("/search")
 async def search(
-    keyword: str = Query(..., min_length=1, max_length=100),
+    keyword: str = Query("", min_length=0, max_length=100),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     category_id: Optional[str] = None,

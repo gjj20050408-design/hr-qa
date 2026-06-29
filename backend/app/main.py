@@ -95,15 +95,33 @@ def _init_providers():
         else:
             logger.warning("LLM provider not configured (LLM_API_KEY/LLM_BASE_URL empty)")
 
-        # Embedding 初始化（阿里云 DashScope）
-        emb_key = settings.EMBEDDING_API_KEY or ""
-        emb_url = settings.EMBEDDING_BASE_URL or ""
-        emb_model = settings.EMBEDDING_MODEL
-        if emb_key and emb_url:
-            from app.providers.embedding import init_embedding_provider
-            init_embedding_provider(api_key=emb_key, base_url=emb_url, model=emb_model)
+        # Embedding 初始化（优先本地模型，API 作为备选）
+        from app.providers.embedding import init_embedding_provider, embedding_provider, NoOpEmbeddingProvider
+        if settings.EMBEDDING_USE_LOCAL:
+            logger.info(f"Trying local embedding model: {settings.EMBEDDING_LOCAL_MODEL}")
+            emb = init_embedding_provider(use_local=True, local_model=settings.EMBEDDING_LOCAL_MODEL)
+            # 测试本地模型是否真正可用
+            test = emb.embed("test")
+            if not test:
+                logger.warning("Local embedding model not available, falling back to API...")
+                if settings.EMBEDDING_API_KEY and settings.EMBEDDING_BASE_URL:
+                    init_embedding_provider(
+                        api_key=settings.EMBEDDING_API_KEY,
+                        base_url=settings.EMBEDDING_BASE_URL,
+                        model=settings.EMBEDDING_MODEL,
+                    )
+                    logger.info(f"Using API embedding model: {settings.EMBEDDING_MODEL}")
+                else:
+                    logger.warning("No embedding provider available, RAG disabled")
+        elif settings.EMBEDDING_API_KEY and settings.EMBEDDING_BASE_URL:
+            logger.info(f"Using API embedding model: {settings.EMBEDDING_MODEL}")
+            init_embedding_provider(
+                api_key=settings.EMBEDDING_API_KEY,
+                base_url=settings.EMBEDDING_BASE_URL,
+                model=settings.EMBEDDING_MODEL,
+            )
         else:
-            logger.warning("Embedding provider not configured (EMBEDDING_API_KEY empty), RAG disabled")
+            logger.warning("Embedding provider not configured, RAG disabled")
 
         # 向量库初始化（本地 SQLite 持久化，无需 ChromaDB 服务）
         from app.providers.vector_store import init_vector_store

@@ -40,9 +40,10 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const res = await getSessionMessages(sessionId)
       const records = res.data.data?.items || []
-      // 每条记录生成 user + assistant 两条消息，按时间正序排列
+      // 后端返回的是 desc（最新在前），需要反转后按时间正序排列
       const msgs: ChatMessage[] = []
-      for (const r of records) {
+      const sorted = [...records].reverse()
+      for (const r of sorted) {
         msgs.push({
           id: r.record_id + '-q',
           role: 'user',

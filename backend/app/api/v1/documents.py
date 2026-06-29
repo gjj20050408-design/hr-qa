@@ -190,6 +190,87 @@ async def update_document(
         raise HTTPException(status_code=400, detail=error_response(30001, str(e)))
 
 
+@router.post(f"{DOC_PREFIX}/{{document_id}}/publish")
+async def publish_document(
+    document_id: str,
+    current_user=Depends(require_hr_plus),
+    db: AsyncSession = Depends(get_db),
+):
+    """发布文档并触发向量化"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    from app.models.document import Document
+    from app.enums.enums import DocStatus
+
+    doc = await db.get(Document, document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail=error_response(30001, "文档不存在"))
+
+    # 状态检查
+    if doc.status != DocStatus.DRAFT:
+        raise HTTPException(status_code=400, detail=error_response(30002, "只有草稿状态的文档可以发布"))
+
+    try:
+        # 1. 发布文档
+        doc.publish()
+
+        # 2. 分块
+        from app.providers.vector_store import document_chunker, vector_store
+        from app.providers.embedding import embedding_provider
+        from app.providers.vector_store import Chunk as VSChunk
+
+        chunks = document_chunker.split(doc.content, chunk_size=500)
+        if not chunks:
+            raise ValueError("文档内容为空，无法分块")
+
+        logger.info(f"Document {document_id}: split into {len(chunks)} chunks")
+
+        # 3. 向量化
+        texts = [c.content for c in chunks]
+        embeddings = embedding_provider.embed_batch(texts)
+
+        valid_embeddings = any(e for e in embeddings)
+        if not valid_embeddings:
+            raise ValueError("向量化失败，Embedding API 返回空结果")
+
+        logger.info(f"Document {document_id}: generated {len(embeddings)} embeddings")
+
+        # 4. 存入向量库
+        vs_chunks = [
+            VSChunk(
+                chunk_id=c.chunk_id,
+                document_id=document_id,
+                content=c.content,
+                chunk_index=i,
+                token_count=c.token_count,
+            )
+            for i, c in enumerate(chunks)
+        ]
+        vector_store.store(vs_chunks, embeddings)
+
+        # 5. 更新文档元数据
+        doc.embedding_status = "completed"
+        doc.chunk_count = len(chunks)
+
+        await db.flush()
+        logger.info(f"Document {document_id}: published with {len(chunks)} chunks vectorized")
+
+        return success_response(data={
+            "document_id": doc.document_id,
+            "title": doc.title,
+            "status": doc.status.value,
+            "chunk_count": doc.chunk_count,
+            "embedding_status": doc.embedding_status,
+        }, message="文档发布成功，向量化完成")
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=error_response(30002, str(e)))
+    except Exception as e:
+        logger.error(f"Publish failed for document {document_id}: {e}")
+        raise HTTPException(status_code=500, detail=error_response(90001, f"发布失败: {str(e)}"))
+
+
 @router.delete(f"{DOC_PREFIX}/{{document_id}}")
 async def archive_document(
     document_id: str,

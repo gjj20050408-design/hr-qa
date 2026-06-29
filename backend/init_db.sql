@@ -419,6 +419,18 @@ INSERT INTO users (
     '2024-01-01', '总部', 'single', 'active'
 ) ON DUPLICATE KEY UPDATE name = VALUES(name);
 
+-- 测试账号 (账号: 123, 密码: 123, 角色: admin)
+INSERT INTO users (
+    user_id, employee_id, name, email, phone,
+    password_hash, role, department_id, job_level,
+    hire_date, work_location, marital_status, status
+) VALUES (
+    'user123', '123', '测试用户', NULL, NULL,
+    '$2b$12$hSlAhczG0vrt4WMUAmeiI.2P3MppnF0CBOvFIrbR.KjIcNVpYAk22',
+    'admin', 'root', NULL,
+    '2024-01-01', '总部', NULL, 'active'
+) ON DUPLICATE KEY UPDATE name = VALUES(name);
+
 -- 3.3 预置分类
 INSERT INTO categories (category_id, name, parent_id, type, access_level, sort_order) VALUES
     ('cat_doc_root', '制度文档', NULL, 'document', 'all_roles', 0),

@@ -42,7 +42,7 @@
           {{ record.answer?.slice(0, 100) }}{{ record.answer?.length > 100 ? '...' : '' }}
         </div>
         <div class="record-footer">
-          <span>{{ record.created_at?.slice(0, 16) }} · 响应 {{ record.response_time_ms }}ms</span>
+          <span>{{ record.created_at?.slice(0, 16) }} · 响应 {{ (record.response_time_ms / 1000).toFixed(2) }}s</span>
           <el-button link :type="record.is_favorite ? 'warning' : 'info'" size="small" @click.stop="toggleFav(record)">
             <el-icon><StarFilled v-if="record.is_favorite" /></el-icon>
           </el-button>

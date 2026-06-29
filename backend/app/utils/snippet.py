@@ -19,6 +19,12 @@ def generate_snippet(content: str, query: str, context_radius: int = 50) -> str:
     if not content:
         return ""
 
+    # 空查询时返回内容开头摘要
+    if not query or not query.strip():
+        if len(content) > context_radius * 3:
+            return content[:context_radius * 3] + "..."
+        return content
+
     # 策略1：直接字符串匹配
     idx = content.find(query)
 
