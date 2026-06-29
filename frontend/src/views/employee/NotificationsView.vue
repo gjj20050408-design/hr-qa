@@ -59,79 +59,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { Announcement } from '@/types'
+import { getNotifications, markAsRead, markAllRead as markAllReadApi } from '@/api/notification'
+import { ElMessage } from 'element-plus'
 
 const filter = ref('all')
+const notifications = ref<Announcement[]>([])
 
-// Mock数据
-const notifications = ref<Announcement[]>([
-  {
-    announcement_id: 'ann-001',
-    title: '薪酬制度 V3.0 更新通知',
-    content: '薪酬制度已更新至V3.0版本，涉及薪资结构调整和个税计算方式变更，请全体员工及时查阅最新版本。',
-    priority: 'urgent',
-    target_type: 'all',
-    target_ids: [],
-    attachment: '',
-    published_by: '',
-    publisher_name: '系统管理员',
-    published_at: '2026-06-24 09:00',
-    is_read: false,
-  },
-  {
-    announcement_id: 'ann-002',
-    title: '关于2026年度健康体检安排的通知',
-    content: '本年度员工健康体检将于6月25日至7月15日进行，请各部门组织员工按时参加。',
-    priority: 'important',
-    target_type: 'all',
-    target_ids: [],
-    attachment: '',
-    published_by: '',
-    publisher_name: 'HR部门',
-    published_at: '2026-06-23 14:30',
-    is_read: false,
-  },
-  {
-    announcement_id: 'ann-003',
-    title: '年假制度修订说明',
-    content: '关于年假延期政策的补充说明：未休年假可延期至次年3月31日。因工作需要无法休假的特殊情况需部门总监审批。',
-    priority: 'normal',
-    target_type: 'all',
-    target_ids: [],
-    attachment: '',
-    published_by: '',
-    publisher_name: 'HR部门',
-    published_at: '2026-06-20',
-    is_read: true,
-  },
-  {
-    announcement_id: 'ann-004',
-    title: '假期申请流程优化通知',
-    content: '为提升效率，OA系统假期申请流程已优化，新增移动端审批功能。',
-    priority: 'normal',
-    target_type: 'all',
-    target_ids: [],
-    attachment: '',
-    published_by: '',
-    publisher_name: '系统管理员',
-    published_at: '2026-06-18',
-    is_read: true,
-  },
-  {
-    announcement_id: 'ann-005',
-    title: 'HR制度智能问答系统正式上线',
-    content: '欢迎使用HR制度智能问答系统！本系统提供7×24小时制度查询与AI问答服务。',
-    priority: 'normal',
-    target_type: 'all',
-    target_ids: [],
-    attachment: '',
-    published_by: '',
-    publisher_name: '系统管理员',
-    published_at: '2026-06-15',
-    is_read: true,
-  },
-])
+async function loadNotifications() {
+  try {
+    const res = await getNotifications({ page_size: 100 })
+    notifications.value = (res.data?.items || []).map((n: Announcement) => ({
+      ...n,
+      is_read: n.is_read ?? false,
+    }))
+  } catch {}
+}
+
+onMounted(loadNotifications)
 
 const unreadCount = computed(() => notifications.value.filter(n => !n.is_read).length)
 
@@ -147,12 +93,21 @@ function priorityLabel(p: string) {
   return map[p] || '公告'
 }
 
-function handleRead(item: Announcement) {
-  item.is_read = true
+async function handleRead(item: Announcement) {
+  if (!item.is_read) {
+    try {
+      await markAsRead(item.announcement_id)
+      item.is_read = true
+    } catch {}
+  }
 }
 
-function markAllRead() {
-  notifications.value.forEach(n => n.is_read = true)
+async function markAllRead() {
+  try {
+    await markAllReadApi()
+    notifications.value.forEach(n => n.is_read = true)
+    ElMessage.success('已全部标记为已读')
+  } catch {}
 }
 </script>
 

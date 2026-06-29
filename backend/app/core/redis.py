@@ -48,14 +48,24 @@ async def rate_limit_check(key: str, max_requests: int, window_seconds: int = 60
     1. 移除窗口外的旧记录
     2. 检查当前窗口内请求数
     3. 未超限则添加新记录并返回 True
+
+    Redis 不可用时自动放行（fail-open 策略），避免因 Redis 故障阻塞业务。
     """
     import time
-    r = await get_redis()
-    now_ms = int(time.time() * 1000)
-    window_start = now_ms - (window_seconds * 1000)
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        r = await get_redis()
+    except Exception as e:
+        logger.warning(f"Redis unavailable, rate limit bypassed: {e}")
+        return True
 
-    # Lua 脚本保证原子性：清理过期记录 → 计数 → 判断
-    lua_script = """
+    try:
+        now_ms = int(time.time() * 1000)
+        window_start = now_ms - (window_seconds * 1000)
+
+        # Lua 脚本保证原子性：清理过期记录 → 计数 → 判断
+        lua_script = """
     local key = KEYS[1]
     local now = tonumber(ARGV[1])
     local window_start = tonumber(ARGV[2])
@@ -78,6 +88,9 @@ async def rate_limit_check(key: str, max_requests: int, window_seconds: int = 60
     else
         return 0
     end
-    """
-    result = await r.eval(lua_script, 1, key, now_ms, window_start, max_requests, window_seconds)
-    return bool(result)
+        """
+        result = await r.eval(lua_script, 1, key, now_ms, window_start, max_requests, window_seconds)
+        return bool(result)
+    except Exception as e:
+        logger.warning(f"Redis rate limit error, bypassed: {e}")
+        return True

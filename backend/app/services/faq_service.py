@@ -1,6 +1,7 @@
 """FAQ 管理服务"""
 from typing import Optional
 from sqlalchemy import select, func, desc
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.faq import FAQ
 from app.models.audit_log import AuditLog
@@ -61,7 +62,7 @@ class FAQService:
         result = await db_session.execute(count_query)
         total = result.scalar() or 0
 
-        query = query.order_by(desc(FAQ.updated_at)).offset((page - 1) * page_size).limit(page_size)
+        query = query.options(selectinload(FAQ.category)).order_by(desc(FAQ.updated_at)).offset((page - 1) * page_size).limit(page_size)
         result = await db_session.execute(query)
         faqs = result.scalars().all()
 

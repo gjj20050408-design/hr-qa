@@ -125,10 +125,64 @@ async def create_session(current_user=Depends(get_current_user)):
     return success_response(data={"session_id": session_id}, message="会话已创建")
 
 
+@router.get("/qa/sessions")
+async def list_sessions(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取用户的会话列表"""
+    sessions = await QAService.get_sessions(current_user.user_id, db)
+    return success_response(data={"items": sessions})
+
+
+@router.patch("/qa/sessions/{session_id}/title")
+async def rename_session(
+    session_id: str,
+    req: dict,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """重命名会话"""
+    try:
+        session = await QAService.rename_session(
+            session_id=session_id, user_id=current_user.user_id,
+            title=req.get("title", ""), db_session=db,
+        )
+        return success_response(data={"session_id": session.session_id, "title": session.title})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=error_response(90001, str(e)))
+
+
+@router.patch("/qa/sessions/{session_id}/pin")
+async def toggle_pin_session(
+    session_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """切换会话置顶状态"""
+    try:
+        session = await QAService.toggle_pin_session(
+            session_id=session_id, user_id=current_user.user_id, db_session=db,
+        )
+        return success_response(data={"session_id": session.session_id, "is_pinned": session.is_pinned})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=error_response(90001, str(e)))
+
+
 @router.delete("/qa/sessions/{session_id}")
-async def delete_session(session_id: str, current_user=Depends(get_current_user)):
-    """清除/结束会话"""
-    return success_response(message="会话已结束")
+async def delete_session(
+    session_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """删除会话及其所有问答记录"""
+    try:
+        await QAService.delete_session(
+            session_id=session_id, user_id=current_user.user_id, db_session=db,
+        )
+        return success_response(message="会话已删除")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=error_response(90001, str(e)))
 
 
 @router.get("/qa/records")

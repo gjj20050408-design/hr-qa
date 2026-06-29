@@ -1,5 +1,5 @@
 """用户表 User — 完整 ORM 模型"""
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from sqlalchemy import Column, String, Integer, Date, DateTime, Enum, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -40,9 +40,9 @@ class User(Base):
         return vp(plain, self.password_hash)
 
     def is_locked(self) -> bool:
-        if self.locked_until and datetime.utcnow() < self.locked_until:
+        if self.locked_until and datetime.now(timezone.utc) < self.locked_until:
             return True
-        if self.locked_until and datetime.utcnow() >= self.locked_until:
+        if self.locked_until and datetime.now(timezone.utc) >= self.locked_until:
             self.locked_until = None
             self.login_attempts = 0
         return False
@@ -51,7 +51,7 @@ class User(Base):
         self.login_attempts += 1
         max_attempts = SECURITY_CONFIG.get("max_login_attempts", 5)
         if self.login_attempts >= max_attempts:
-            self.locked_until = datetime.utcnow() + timedelta(
+            self.locked_until = datetime.now(timezone.utc) + timedelta(
                 minutes=SECURITY_CONFIG.get("lockout_duration_minutes", 30)
             )
 
@@ -65,7 +65,7 @@ class User(Base):
             "employee_id": self.employee_id,
             "name": self.name,
             "role": self.role.value if self.role else None,
-            "department": self.department.name if self.department else None,
+            "department_name": self.department.name if self.department else None,
             "department_id": self.department_id,
             "job_level": self.job_level,
             "hire_date": str(self.hire_date) if self.hire_date else None,
@@ -81,7 +81,7 @@ class User(Base):
         return data
 
     def compute_tenure_years(self) -> int:
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
         years = today.year - self.hire_date.year
         if today.month < self.hire_date.month or (
             today.month == self.hire_date.month and today.day < self.hire_date.day

@@ -1,5 +1,5 @@
 """制度文档表 Document — 含权限解析逻辑"""
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Integer, Text, Enum, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -59,7 +59,7 @@ class Document(Base):
     def publish(self) -> None:
         if self.status == DocStatus.DRAFT:
             self.status = DocStatus.PUBLISHED
-            self.published_at = datetime.utcnow()
+            self.published_at = datetime.now(timezone.utc)
 
     def archive(self) -> None:
         self.status = DocStatus.ARCHIVED

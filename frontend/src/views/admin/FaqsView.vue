@@ -3,11 +3,8 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <el-input v-model="searchText" placeholder="搜索FAQ..." :prefix-icon="Search" size="default" class="search-input" />
-        <el-select v-model="categoryFilter" placeholder="全部分类" size="default" class="tool-select">
-          <el-option label="全部分类" value="all" />
-          <el-option label="考勤FAQ" value="cat-faq-1" />
-          <el-option label="薪酬FAQ" value="cat-faq-2" />
-          <el-option label="休假FAQ" value="cat-faq-3" />
+        <el-select v-model="categoryFilter" placeholder="全部分类" size="default" class="tool-select" @change="loadFAQs">
+          <el-option v-for="cat in categories" :key="cat.value" :label="cat.label" :value="cat.value" />
         </el-select>
       </div>
       <el-button type="primary"><el-icon><Plus /></el-icon>新增FAQ</el-button>
@@ -30,22 +27,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Search, Plus } from '@element-plus/icons-vue'
+import { getFAQs, getCategories } from '@/api/admin'
 
 const searchText = ref('')
 const categoryFilter = ref('all')
+const faqs = ref<any[]>([])
+const categories = ref<{ label: string; value: string }[]>([{ label: '全部分类', value: 'all' }])
 
-const faqs = ref([
-  { faq_id:'f1', question:'年假有多少天？', answer:'工龄1-10年享5天，10-20年享10天，20年以上享15天带薪年假。', category_id:'cat-faq-3', category_label:'休假FAQ', view_count:1234 },
-  { faq_id:'f2', question:'加班费怎么计算？', answer:'工作日1.5倍，休息日2倍，法定节假日3倍。', category_id:'cat-faq-1', category_label:'考勤FAQ', view_count:987 },
-])
+async function loadFAQs() {
+  try {
+    const params: any = {}
+    if (categoryFilter.value !== 'all') params.category_id = categoryFilter.value
+    if (searchText.value) params.keyword = searchText.value
+    const res = await getFAQs(params)
+    faqs.value = res.data?.items || []
+  } catch {}
+}
 
-const filteredFaqs = computed(() => faqs.value.filter(f => {
-  const matchCat = categoryFilter.value === 'all' || f.category_id === categoryFilter.value
-  const matchSearch = !searchText.value || f.question.includes(searchText.value)
-  return matchCat && matchSearch
-}))
+async function loadCategories() {
+  try {
+    const res = await getCategories({ type: 'faq' })
+    const items = res.data?.items || []
+    categories.value = [{ label: '全部分类', value: 'all' }]
+    const flatten = (list: any[]) => {
+      for (const c of list) {
+        categories.value.push({ label: c.name, value: c.category_id })
+        if (c.children) flatten(c.children)
+      }
+    }
+    flatten(items)
+  } catch {}
+}
+
+onMounted(() => { loadCategories(); loadFAQs() })
+
+const filteredFaqs = computed(() => faqs.value)
 </script>
 
 <style scoped>

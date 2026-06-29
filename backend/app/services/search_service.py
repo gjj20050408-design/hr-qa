@@ -1,5 +1,6 @@
-"""搜索服务 — MySQL FULLTEXT + Ngram + 权限过滤"""
-from sqlalchemy import select, func, desc
+"""搜索服务 — 中文 LIKE 模糊匹配 + 权限过滤"""
+from sqlalchemy import select, or_
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.document import Document
 from app.enums.enums import DocStatus
@@ -14,22 +15,25 @@ class SearchService:
         keyword: str, user_role, db_session: AsyncSession,
         page: int = 1, page_size: int = 20, category_id: str = None,
     ) -> tuple:
+        # 用 LIKE 模糊匹配（中文场景比 FULLTEXT 更稳定）
+        kw = f"%{keyword}%"
         conditions = [
             Document.status == DocStatus.PUBLISHED,
-            func.match(Document.title, Document.content).against(keyword),
+            or_(
+                Document.title.like(kw),
+                Document.content.like(kw),
+            ),
         ]
         if category_id:
             conditions.append(Document.category_id == category_id)
 
-        # 搜索
-        query = select(Document).where(*conditions).order_by(
-            desc(func.match(Document.title, Document.content).against(keyword))
-        )
+        # 搜索（预加载 category 关系，避免异步懒加载报错）
+        query = select(Document).options(selectinload(Document.category)).where(*conditions)
         result = await db_session.execute(query)
         docs = result.scalars().all()
 
         # 权限过滤
-        allowed, filtered = PermissionFilter.filter_documents(docs, user_role)
+        allowed, filtered = await PermissionFilter.filter_documents(docs, user_role)
 
         # 分页
         total = len(allowed)

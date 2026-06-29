@@ -2,9 +2,10 @@
 import json
 from typing import Optional
 from datetime import datetime
-from sqlalchemy import select, func, desc, and_
+from sqlalchemy import select, func, desc, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.qa_record import QARecord
+from app.models.chat_session import ChatSession
 from app.models.base import uuid4_str
 from app.enums.enums import AnswerType, FeedbackType
 
@@ -18,6 +19,16 @@ class QAService:
         reference_docs: list = None, response_time_ms: int = 0,
         db_session: AsyncSession = None,
     ) -> QARecord:
+        # 如果会话不存在，自动创建（标题默认为首条问题）
+        existing = await db_session.get(ChatSession, session_id)
+        if not existing:
+            new_session = ChatSession(
+                session_id=session_id,
+                user_id=user_id,
+                title=question[:50] if question else "新对话",
+            )
+            db_session.add(new_session)
+
         record = QARecord(
             record_id=uuid4_str(),
             user_id=user_id,
@@ -133,12 +144,59 @@ class QAService:
 
     @staticmethod
     async def get_sessions(user_id: str, db_session: AsyncSession) -> list:
+        """获取用户的会话列表（置顶优先，再按更新时间倒序）"""
         result = await db_session.execute(
-            select(QARecord.session_id, func.min(QARecord.created_at), func.count(QARecord.record_id))
-            .where(QARecord.user_id == user_id)
-            .group_by(QARecord.session_id)
-            .order_by(desc(func.min(QARecord.created_at)))
-            .limit(20)
+            select(ChatSession)
+            .where(ChatSession.user_id == user_id)
+            .order_by(desc(ChatSession.is_pinned), desc(ChatSession.created_at))
+            .limit(50)
         )
-        rows = result.all()
-        return [{"session_id": r[0], "started_at": str(r[1]), "message_count": r[2]} for r in rows]
+        sessions = result.scalars().all()
+        return [
+            {
+                "session_id": s.session_id,
+                "title": s.title or "新对话",
+                "created_at": str(s.created_at) if s.created_at else "",
+                "updated_at": str(s.updated_at) if s.updated_at else "",
+                "is_pinned": s.is_pinned,
+            }
+            for s in sessions
+        ]
+
+    @staticmethod
+    async def rename_session(session_id: str, user_id: str, title: str, db_session: AsyncSession) -> ChatSession:
+        session = await db_session.get(ChatSession, session_id)
+        if not session:
+            raise ValueError("会话不存在")
+        if session.user_id != user_id:
+            raise ValueError("无权操作此会话")
+        session.title = title.strip()[:200] if title.strip() else "新对话"
+        await db_session.flush()
+        return session
+
+    @staticmethod
+    async def toggle_pin_session(session_id: str, user_id: str, db_session: AsyncSession) -> ChatSession:
+        session = await db_session.get(ChatSession, session_id)
+        if not session:
+            raise ValueError("会话不存在")
+        if session.user_id != user_id:
+            raise ValueError("无权操作此会话")
+        session.is_pinned = not session.is_pinned
+        await db_session.flush()
+        return session
+
+    @staticmethod
+    async def delete_session(session_id: str, user_id: str, db_session: AsyncSession) -> None:
+        session = await db_session.get(ChatSession, session_id)
+        if not session:
+            return
+        if session.user_id != user_id:
+            raise ValueError("无权操作此会话")
+        # 删除关联的问答记录
+        records = await db_session.execute(
+            select(QARecord).where(QARecord.session_id == session_id)
+        )
+        for r in records.scalars().all():
+            await db_session.delete(r)
+        await db_session.delete(session)
+        await db_session.flush()

@@ -1,6 +1,6 @@
 """纠错与公告相关 Schema"""
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class CorrectionCreateRequest(BaseModel):
@@ -15,6 +15,13 @@ class CorrectionReviewRequest(BaseModel):
     action: str = Field(..., description="审核动作: approved/rejected")
     comment: Optional[str] = Field(None, max_length=500, description="审核意见")
 
+    @model_validator(mode="after")
+    def validate_reject_comment(self):
+        """驳回时必须填写审核意见"""
+        if self.action == "rejected" and (not self.comment or not self.comment.strip()):
+            raise ValueError("驳回时必须填写审核意见(review_comment)")
+        return self
+
 
 class AnnouncementCreateRequest(BaseModel):
     """创建公告请求"""
@@ -24,3 +31,8 @@ class AnnouncementCreateRequest(BaseModel):
     target_type: str = Field(default="all", description="推送范围类型: all/department/role")
     target_ids: Optional[List[str]] = Field(None, description="目标范围ID列表")
     attachment: Optional[str] = Field(None, max_length=500, description="附件路径")
+
+
+class AnnouncementMarkReadRequest(BaseModel):
+    """标记公告已读请求"""
+    announcement_id: str = Field(..., description="公告ID")

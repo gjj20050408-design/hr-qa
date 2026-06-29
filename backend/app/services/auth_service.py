@@ -1,7 +1,7 @@
 """认证服务 — 注册、登录、Token 管理"""
 import re
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
 from sqlalchemy import select
@@ -55,6 +55,14 @@ class AuthService:
         if result.scalar_one_or_none():
             raise ValueError("工号已存在")
 
+        # 2.5 验证部门是否存在
+        from app.models.department import Department
+        dept_result = await db_session.execute(
+            select(Department).where(Department.department_id == department_id)
+        )
+        if not dept_result.scalar_one_or_none():
+            raise ValueError("部门不存在")
+
         # 3. 创建用户
         user = User(
             user_id=uuid4_str(),
@@ -63,6 +71,7 @@ class AuthService:
             email=email,
             phone=phone,
             department_id=department_id,
+            hire_date=date.today(),
         )
         user.set_password(password)
         db_session.add(user)
@@ -78,6 +87,8 @@ class AuthService:
         )
         db_session.add(audit)
         await db_session.flush()
+        # 预加载 department 关系，避免 mask_sensitive() 中懒加载触发 MissingGreenlet
+        await db_session.refresh(user, attribute_names=["department"])
         return user
 
     @staticmethod
@@ -98,12 +109,12 @@ class AuthService:
         if not user:
             raise ValueError("账号或密码错误")
 
-        if user.status.value != "active":
+        if not user.status or user.status.value != "active":
             raise ValueError("账号已禁用")
 
         # 2. 检查锁定
         if user.is_locked():
-            remaining = int((user.locked_until - datetime.utcnow()).total_seconds() / 60)
+            remaining = int((user.locked_until - datetime.now(timezone.utc)).total_seconds() / 60)
             raise ValueError(f"账号已锁定，请{remaining}分钟后重试")
 
         # 3. 验证密码
@@ -175,6 +186,8 @@ class AuthService:
             stored = await r.get(f"refresh:{user_id}")
             if stored != refresh_token:
                 raise ValueError("Refresh Token 已被使用或失效")
+        except ValueError:
+            raise
         except Exception:
             pass
 

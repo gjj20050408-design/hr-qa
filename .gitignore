@@ -54,6 +54,9 @@ coverage/
 .coverage
 htmlcov/
 
+# --- Upload runtime ---
+backend/uploads/
+
 # --- Temporary files ---
 *.tmp
 *.temp

@@ -13,7 +13,7 @@ export function register(data: RegisterRequest): Promise<ApiResponse<UserInfo>> 
 
 // 获取当前用户信息
 export function getCurrentUser(): Promise<ApiResponse<UserInfo>> {
-  return request.get('/auth/me').then(res => res.data)
+  return request.get('/users/me').then(res => res.data)
 }
 
 // 刷新Token

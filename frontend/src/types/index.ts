@@ -15,6 +15,7 @@ export interface UserInfo {
   role: UserRole
   department_id: string
   department_name?: string
+  department?: string
   job_level: string
   hire_date: string
   work_location: string
@@ -148,6 +149,8 @@ export interface ChatMessage {
   answer_type?: string
   reference_docs?: { doc_id: string; title: string; section: string }[]
   response_time_ms?: number
+  is_favorite?: boolean
+  is_permission_denied?: boolean
   created_at: string
 }
 

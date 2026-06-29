@@ -30,22 +30,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
+import { getAuditLogs } from '@/api/admin'
 
 const searchText = ref('')
 const actionFilter = ref('all')
+const logs = ref<any[]>([])
+const total = ref(0)
+const page = ref(1)
 
-const logs = ref([
-  { user_name:'系统管理员',action:'登录',resource_type:'user',detail:'管理员登录系统',ip_address:'192.168.1.100',created_at:'2026-06-24 17:30:00' },
-  { user_name:'李HR',action:'文档更新',resource_type:'document',detail:'更新《年假天数与工龄计算规定》',ip_address:'192.168.1.101',created_at:'2026-06-24 16:15:00' },
-])
+async function loadLogs() {
+  try {
+    const params: any = { page: page.value, page_size: 50 }
+    if (actionFilter.value !== 'all') params.action = actionFilter.value
+    if (searchText.value) params.resource_id = searchText.value
+    const res = await getAuditLogs(params)
+    logs.value = res.data?.items || []
+    total.value = res.data?.pagination?.total || 0
+  } catch {}
+}
 
-const filteredLogs = computed(() => logs.value.filter(l => {
-  const matchAction = actionFilter.value === 'all' || l.action.includes(actionFilter.value)
-  const matchSearch = !searchText.value || l.user_name.includes(searchText.value) || l.detail.includes(searchText.value)
-  return matchAction && matchSearch
-}))
+onMounted(loadLogs)
+
+const filteredLogs = computed(() => logs.value)
 </script>
 
 <style scoped>

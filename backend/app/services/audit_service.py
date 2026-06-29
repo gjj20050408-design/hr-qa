@@ -1,4 +1,5 @@
 """审计日志服务"""
+from datetime import datetime
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.audit_log import AuditLog
@@ -11,6 +12,7 @@ class AuditService:
         db_session: AsyncSession, page: int = 1, page_size: int = 50,
         user_id: str = None, action: str = None,
         resource_type: str = None, resource_id: str = None,
+        start_date: str = None, end_date: str = None,
     ) -> tuple:
         from sqlalchemy import func
         conditions = []
@@ -22,6 +24,18 @@ class AuditService:
             conditions.append(AuditLog.resource_type == resource_type)
         if resource_id:
             conditions.append(AuditLog.resource_id == resource_id)
+        if start_date:
+            try:
+                start_dt = datetime.fromisoformat(start_date)
+                conditions.append(AuditLog.created_at >= start_dt)
+            except ValueError:
+                pass
+        if end_date:
+            try:
+                end_dt = datetime.fromisoformat(end_date)
+                conditions.append(AuditLog.created_at <= end_dt)
+            except ValueError:
+                pass
 
         query = select(AuditLog)
         count_query = select(func.count(AuditLog.log_id))

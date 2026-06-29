@@ -107,15 +107,26 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore()
-  authStore.restoreUser()
+
+  // 仅在 token 存在但 user 为空时恢复，避免每次导航都从 localStorage 解析
+  const token = localStorage.getItem('access_token')
+  if (token && !authStore.user) {
+    authStore.restoreUser()
+  }
+
+  // accessToken 检查：未登录且非登录页，重定向到登录页
+  if (to.path !== '/login' && !token) {
+    localStorage.removeItem('user_info')
+    return next({ path: '/login', query: { redirect: to.fullPath } })
+  }
 
   // 游客页面直接放行
   if (to.meta.guest) {
     return next()
   }
 
-  // 需要管理员权限
-  if (to.meta.requiresAdmin && !authStore.isAdmin) {
+  // 需要管理员权限（HR专员和admin均可访问管理后台）
+  if (to.meta.requiresAdmin && !authStore.isAdmin && !authStore.isHR) {
     return next('/employee/search')
   }
 

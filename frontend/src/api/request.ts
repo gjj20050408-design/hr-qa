@@ -43,10 +43,16 @@ request.interceptors.response.use(
   },
   (error) => {
     const status = error.response?.status
+    const backendDetail = error.response?.data?.detail
     const message =
-      error.response?.data?.message || error.message || '网络错误'
+      (typeof backendDetail === 'object' && backendDetail?.message)
+        || error.response?.data?.message
+        || error.message
+        || '网络错误'
     if (status === 401) {
       localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('user_info')
       window.location.href = '/login'
     } else if (status === 403) {
       ElMessage.error('无权限访问该资源')

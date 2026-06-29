@@ -1,6 +1,6 @@
 """统一响应 Schema — 对应架构设计 §5.3"""
 from typing import Optional, Any, Generic, TypeVar
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
 T = TypeVar("T")
@@ -12,7 +12,7 @@ class ResponseBase(BaseModel):
     message: str = "success"
     data: Any = None
     request_id: Optional[str] = None
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
 
 
 class PaginationInfo(BaseModel):
@@ -29,7 +29,7 @@ class ResponseList(BaseModel):
     message: str = "success"
     data: Optional[dict] = None
     request_id: Optional[str] = None
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
 
 
 def success_response(data: Any = None, message: str = "success") -> dict:
@@ -38,7 +38,7 @@ def success_response(data: Any = None, message: str = "success") -> dict:
         "message": message,
         "data": data,
         "request_id": None,
-        "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
 
@@ -57,7 +57,7 @@ def list_response(items: list, page: int, page_size: int, total: int) -> dict:
             },
         },
         "request_id": None,
-        "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
 
@@ -67,5 +67,5 @@ def error_response(code: int, message: str) -> dict:
         "message": message,
         "data": None,
         "request_id": None,
-        "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }

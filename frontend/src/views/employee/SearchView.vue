@@ -29,7 +29,15 @@
       <div class="search-results">
         <p class="result-count" v-if="results.length">
           找到 <strong>{{ total }}</strong> 条相关制度
+          <span v-if="filteredCount > 0" class="filtered-count">
+            （已过滤 {{ filteredCount }} 条受限文档）
+          </span>
         </p>
+
+        <!-- 权限过滤提示 -->
+        <div v-if="notice" class="filter-notice">
+          🔒 {{ notice }}
+        </div>
 
         <div
           v-for="doc in results"
@@ -47,15 +55,18 @@
               {{ doc.has_access !== false ? '可查看' : '需HR权限' }}
             </el-tag>
           </div>
-          <p class="card-summary" v-html="getHighlight(doc.content || doc.summary || '')"></p>
+          <p class="card-summary" v-html="getHighlight(doc.snippet || '')"></p>
           <div class="card-meta">
-            <span>{{ doc.category_name }}</span>
+            <span>{{ doc.category || doc.category_name }}</span>
             <span>V{{ doc.version }}</span>
-            <span>{{ doc.updated_at?.slice(0, 10) }}</span>
+            <span>{{ doc.published_at?.slice(0, 10) || doc.updated_at?.slice(0, 10) }}</span>
           </div>
         </div>
 
-        <el-empty v-if="!results.length && keyword" description="未找到相关制度" />
+        <el-empty v-if="!results.length && keyword && !notice" description="未找到相关制度" />
+        <div v-if="!results.length && notice" class="filter-notice-full">
+          🔒 {{ notice }}
+        </div>
         <el-pagination
           v-if="total > pageSize"
           v-model:current-page="currentPage"
@@ -83,7 +94,7 @@
               <span>{{ selectedDoc.updated_at?.slice(0, 10) }} 更新</span>
             </div>
           </div>
-          <el-button size="small" class="correction-btn">纠错反馈</el-button>
+          <el-button size="small" class="correction-btn" @click="openCorrectionDialog">纠错反馈</el-button>
         </div>
       </div>
       <div class="detail-content" v-html="formattedContent"></div>
@@ -98,6 +109,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { searchDocuments, getDocumentDetail } from '@/api/search'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Document as DocType } from '@/types'
 
 const keyword = ref('')
@@ -108,105 +120,60 @@ const total = ref(0)
 const results = ref<DocType[]>([])
 const selectedDoc = ref<DocType | null>(null)
 
-const allCategories = [
-  { label: '全部', value: '' },
-  { label: '考勤制度', value: 'cat-doc-1' },
-  { label: '休假制度', value: 'cat-doc-4' },
-  { label: '薪酬制度', value: 'cat-doc-2' },
-  { label: '福利制度', value: 'cat-doc-3' },
-  { label: '绩效制度', value: 'cat-doc-5' },
-]
-
-// 模拟数据用于原型展示
-const mockResults: DocType[] = [
-  {
-    document_id: 'doc-001',
-    title: '年假天数与工龄计算规定',
-    content: '员工累计工作已满1年不满10年的，年假5天；已满10年不满20年的，年假10天；已满20年的，年假15天。',
-    summary: '...员工累计工作已满1年不满10年的，年假5天；已满10年不满20年的，年假10天...',
-    category_id: 'cat-doc-4-1',
-    category_name: '休假制度 · 年假规定',
-    format: 'word',
-    version: '2.1',
-    version_note: '',
-    status: 'published',
-    access_level: 'all_roles',
-    uploaded_by: '',
-    word_count: 1500,
-    published_at: '2026-06-15',
-    created_at: '2026-06-15',
-    updated_at: '2026-06-15',
-    has_access: true,
-  },
-  {
-    document_id: 'doc-002',
-    title: '年假申请流程与审批规范',
-    content: '员工申请年假需提前3个工作日通过OA系统提交，由直属主管审批。',
-    summary: '...员工申请年假需提前3个工作日通过OA系统提交...',
-    category_id: 'cat-doc-4-1',
-    category_name: '休假制度 · 年假规定',
-    format: 'word',
-    version: '1.3',
-    version_note: '',
-    status: 'published',
-    access_level: 'all_roles',
-    uploaded_by: '',
-    word_count: 800,
-    published_at: '2026-05-20',
-    created_at: '2026-05-20',
-    updated_at: '2026-05-20',
-    has_access: true,
-  },
-  {
-    document_id: 'doc-003',
-    title: '病假与年假转换政策说明',
-    content: '该文档需要HR专员及以上权限才能查看完整内容',
-    summary: '该文档需要HR专员及以上权限才能查看完整内容',
-    category_id: 'cat-doc-4-2',
-    category_name: '休假制度 · 病假规定',
-    format: 'word',
-    version: '1.0',
-    version_note: '',
-    status: 'published',
-    access_level: 'hr_admin_only',
-    uploaded_by: '',
-    word_count: 500,
-    published_at: '2026-04-01',
-    created_at: '2026-04-01',
-    updated_at: '2026-04-01',
-    has_access: false,
-  },
-]
+const allCategories = ref<{ label: string; value: string }[]>([])
+const notice = ref('')
+const filteredCount = ref(0)
+const searching = ref(false)
 
 const formattedContent = computed(() => {
   if (!selectedDoc.value) return ''
-  const doc = selectedDoc.value
-  return `
-    <h3>第一条 年假享受条件</h3>
-    <p>员工连续工作满1年以上的，享受带薪年休假（以下简称年假）。员工在年假期间享受与正常工作期间相同的工资收入。</p>
-    <h3>第二条 年假天数标准</h3>
-    <p>员工累计工作年限满1年不满10年的，年假<span class="search-highlight">5天</span>；满10年不满20年的，年假<span class="search-highlight">10天</span>；满20年的，年假<span class="search-highlight">15天</span>。</p>
-    <h3>第三条 年假申请流程</h3>
-    <p>员工申请年假需提前3个工作日通过OA系统提交，由直属主管审批。连续申请5天以上需提前7个工作日申请。年假最小申请单位为半天。</p>
-    <div class="tips-box">
-      <p class="tips-title">提示</p>
-      <p>当年未休完的年假可延期至次年3月31日，过期作废。</p>
-    </div>
-  `
+  return selectedDoc.value.content || '文档内容加载中...'
 })
 
 function getHighlight(text: string) {
   if (!keyword.value) return text
-  const reg = new RegExp(`(${keyword.value})`, 'g')
+  const reg = new RegExp(`(${keyword.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
   return text.replace(reg, '<span class="search-highlight">$1</span>')
 }
 
-function selectDoc(doc: DocType) {
-  selectedDoc.value = doc
+async function selectDoc(doc: DocType) {
+  try {
+    const res = await getDocumentDetail(doc.document_id)
+    const resData = res.data || res
+    const data = resData.data || resData
+    selectedDoc.value = { ...doc, ...data }
+  } catch {
+    selectedDoc.value = doc
+  }
+}
+
+async function loadCategories() {
+  try {
+    const { getCategories } = await import('@/api/admin')
+    const res = await getCategories({ type: 'document' })
+    const roots = res.data.data?.items || []
+    // 递归展开树形分类，只取非根节点的叶子分类
+    const flat: { label: string; value: string }[] = []
+    function walk(nodes: any[]) {
+      for (const n of nodes) {
+        if (n.children && n.children.length > 0) {
+          walk(n.children)
+        } else {
+          flat.push({ label: n.name, value: n.category_id })
+        }
+      }
+    }
+    walk(roots)
+    allCategories.value = [
+      { label: '全部', value: '' },
+      ...flat,
+    ]
+  } catch { /* 使用默认分类 */ }
 }
 
 async function doSearch() {
   if (!keyword.value.trim()) return
+  searching.value = true
   try {
     const res = await searchDocuments({
       keyword: keyword.value,
@@ -214,23 +181,50 @@ async function doSearch() {
       page: currentPage.value,
       page_size: pageSize.value,
     })
-    results.value = res.data.items
-    total.value = res.data.pagination.total
-  } catch {
-    // 使用mock数据
-    results.value = mockResults.filter(
-      d => d.title.includes(keyword.value) || d.content.includes(keyword.value)
-    )
-    total.value = results.value.length
+    // res 是 AxiosResponse，res.data 是响应体 {code, data:{items, pagination}}
+    const resData = res.data || res
+    const data = resData.data || {}
+    results.value = data.items || []
+    total.value = data.pagination?.total || 0
+    notice.value = data.notice || ''
+    filteredCount.value = data.pagination?.filtered_count || 0
+  } catch (e) {
+    console.error('搜索失败:', e)
+    results.value = []
+    total.value = 0
+  } finally {
+    searching.value = false
   }
 }
 
+function openCorrectionDialog() {
+  if (!selectedDoc.value) return
+  // 打开纠错提交弹窗
+  ElMessageBox.prompt('请输入您发现的错误或建议', '纠错反馈', {
+    confirmButtonText: '提交',
+    cancelButtonText: '取消',
+    inputType: 'textarea',
+    inputPlaceholder: '请描述文档中的错误或您的改进建议...',
+  }).then(async ({ value }) => {
+    if (!value?.trim()) return
+    try {
+      const { createCorrection } = await import('@/api/admin')
+      await createCorrection({
+        document_id: selectedDoc.value!.document_id,
+        section: selectedDoc.value!.title,
+        description: value.trim(),
+      })
+      ElMessage.success('纠错反馈已提交，感谢您的贡献')
+    } catch {
+      ElMessage.error('提交失败，请稍后重试')
+    }
+  }).catch(() => {
+    // 用户取消
+  })
+}
+
 onMounted(() => {
-  keyword.value = '年假'
-  // 预加载mock数据
-  results.value = mockResults
-  total.value = mockResults.length
-  selectedDoc.value = mockResults[0]
+  loadCategories()
 })
 </script>
 
@@ -432,5 +426,31 @@ onMounted(() => {
   font-weight: 500;
   color: var(--accent);
   margin-bottom: 4px;
+}
+
+.filter-notice {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.filter-notice-full {
+  text-align: center;
+  padding: 32px 16px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.filtered-count {
+  color: #f59e0b;
+  font-size: 12px;
+  margin-left: 4px;
 }
 </style>
