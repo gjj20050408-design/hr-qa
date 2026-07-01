@@ -1,10 +1,12 @@
 """用户表 User — 完整 ORM 模型"""
 from datetime import datetime, timedelta, date, timezone
-from sqlalchemy import Column, String, Integer, Date, DateTime, Enum, ForeignKey
+
+from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
+
 from app.core.database import Base
 from app.core.security import hash_password, verify_password as vp
-from app.models.base import uuid4_str
+from app.models.base import uuid4_str, CaseInsensitiveEnum
 from app.enums.enums import Role, UserStatus, MaritalStatus
 from app.enums.constants import SECURITY_CONFIG
 
@@ -18,13 +20,13 @@ class User(Base):
     email = Column(String(100), nullable=True, index=True)
     phone = Column(String(15), nullable=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(Enum(Role, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=Role.EMPLOYEE)
+    role = Column(CaseInsensitiveEnum(Role), nullable=False, default=Role.EMPLOYEE)
     department_id = Column(String(64), ForeignKey("departments.department_id"), nullable=False)
     job_level = Column(String(20), nullable=True)
     hire_date = Column(Date, nullable=False)
     work_location = Column(String(50), nullable=True)
-    marital_status = Column(Enum(MaritalStatus, values_callable=lambda obj: [e.value for e in obj]), nullable=True)
-    status = Column(Enum(UserStatus, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=UserStatus.ACTIVE)
+    marital_status = Column(CaseInsensitiveEnum(MaritalStatus), nullable=True)
+    status = Column(CaseInsensitiveEnum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
     login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -72,6 +74,8 @@ class User(Base):
             "work_location": self.work_location,
             "marital_status": self.marital_status.value if self.marital_status else None,
             "status": self.status.value if self.status else None,
+            "locked": bool(self.locked_until and datetime.now(timezone.utc) < self.locked_until),
+            "locked_until": self.locked_until.isoformat() if self.locked_until else None,
         }
         if self.phone:
             data["phone"] = self.phone[:3] + "****" + self.phone[-4:]

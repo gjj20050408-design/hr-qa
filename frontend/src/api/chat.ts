@@ -37,12 +37,12 @@ export function togglePinSession(sessionId: string): Promise<ApiResponse<any>> {
 }
 
 // 获取问答历史
-export function getQARecords(params: { page?: number; page_size?: number; answer_type?: string; keyword?: string }): Promise<ApiResponse<PaginatedData<QARecord>>> {
+export function getQARecords(params: { page?: number; page_size?: number; answer_type?: string; keyword?: string }) {
   return request.get('/qa/records', { params })
 }
 
 // 切换收藏
-export function toggleFavorite(recordId: string, isFavorite: boolean): Promise<ApiResponse<{ is_favorite: boolean }>> {
+export function toggleFavorite(recordId: string, isFavorite: boolean) {
   return request.patch(`/qa/records/${recordId}/favorite`, { is_favorite: isFavorite })
 }
 

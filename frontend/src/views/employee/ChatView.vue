@@ -80,20 +80,22 @@
                 <div class="answer-text" v-html="formatAnswer(msg.content)"></div>
                 <div class="answer-source" v-if="msg.reference_docs?.length">
                   <span class="source-label">来源：{{ msg.reference_docs[0].title }}</span>
-                  <span class="source-time">响应：{{ (msg.response_time_ms / 1000).toFixed(2) }}s</span>
+                  <span class="source-time" v-if="msg.response_time_ms">响应：{{ (msg.response_time_ms / 1000).toFixed(2) }}s</span>
                 </div>
               </div>
 
-              <!-- 反馈按钮（权限拒绝的回答不显示） -->
-              <div class="feedback-row" v-if="idx === chatStore.messages.length - 1 && msg.role === 'assistant' && !msg.is_permission_denied">
-                <el-button size="small" text @click="handleFeedback(msg.id, 'helpful')">
-                  <el-icon><Pointer /></el-icon> 有帮助
-                </el-button>
-                <el-button size="small" text @click="handleFeedback(msg.id, 'not_helpful')">
-                  <el-icon><Pointer /></el-icon> 无帮助
-                </el-button>
-                <el-button size="small" text @click="handleFavorite(msg.id, idx)">
-                  <el-icon><Star /></el-icon> 收藏
+              <!-- 操作按钮（权限拒绝的回答不显示） -->
+              <div class="feedback-row" v-if="msg.role === 'assistant' && !msg.is_permission_denied">
+                <template v-if="idx === chatStore.messages.length - 1">
+                  <el-button size="small" text @click="handleFeedback(msg.id, 'helpful')">
+                    <el-icon><Pointer /></el-icon> 有帮助
+                  </el-button>
+                  <el-button size="small" text @click="handleFeedback(msg.id, 'not_helpful')">
+                    <el-icon><Pointer /></el-icon> 无帮助
+                  </el-button>
+                </template>
+                <el-button size="small" text :type="msg.is_favorite ? 'warning' : ''" @click="handleFavorite(msg.id, idx)">
+                  <el-icon><StarFilled v-if="msg.is_favorite" /><Star v-else /></el-icon> {{ msg.is_favorite ? '已收藏' : '收藏' }}
                 </el-button>
               </div>
             </div>
@@ -138,7 +140,7 @@ import { ref, computed, nextTick, watch, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, Pointer, Star, Loading, Position, MoreFilled, EditPen } from '@element-plus/icons-vue'
+import { Plus, Delete, Pointer, Star, StarFilled, Loading, Position, MoreFilled, EditPen } from '@element-plus/icons-vue'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()

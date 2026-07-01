@@ -15,7 +15,6 @@ os.chdir(os.path.join(os.path.dirname(__file__)))
 sys.path.insert(0, os.getcwd())
 
 import pymysql
-from docx import Document as DocxDoc
 from pathlib import Path
 
 # 配置
@@ -39,10 +38,9 @@ DOC_CONFIGS = [
 
 
 def parse_docx(file_path: Path) -> str:
-    """解析 .docx 文件为纯文本"""
-    doc = DocxDoc(str(file_path))
-    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-    return "\n\n".join(paragraphs)
+    """解析 .docx 文件为 Markdown（保留标题层级、列表、加粗、表格）"""
+    from app.providers.docx_parser import parse_docx_to_markdown
+    return parse_docx_to_markdown(str(file_path))
 
 
 def import_to_mysql(conn, doc_id: str, title: str, content: str,

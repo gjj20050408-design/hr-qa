@@ -87,13 +87,18 @@ class AnalyticsService:
 
         # ── 分类分布 ──
         result = await db_session.execute(
-            select(Document.category_id, func.count(Document.document_id))
+            select(Document.category_id, Category.name, func.count(Document.document_id))
+            .join(Category, Category.category_id == Document.category_id, isouter=True)
             .where(Document.status == DocStatus.PUBLISHED)
-            .group_by(Document.category_id)
+            .group_by(Document.category_id, Category.name)
         )
         cat_dist = []
         for row in result.all():
-            cat_dist.append({"category_id": row[0], "count": row[1]})
+            cat_dist.append({
+                "category_id": row[0],
+                "category_name": row[1] or "未分类",
+                "count": row[2],
+            })
 
         # ── 文档与分类总数 ──
         result = await db_session.execute(

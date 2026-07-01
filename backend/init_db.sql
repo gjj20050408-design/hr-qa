@@ -431,18 +431,94 @@ INSERT INTO users (
     '2024-01-01', '总部', NULL, 'active'
 ) ON DUPLICATE KEY UPDATE name = VALUES(name);
 
+-- HR专员账号 (账号: HR001, 密码: Hr@123456, 角色: hr_specialist)
+INSERT INTO users (
+    user_id, employee_id, name, email, phone,
+    password_hash, role, department_id, job_level,
+    hire_date, work_location, marital_status, status
+) VALUES (
+    'hr001', 'HR001', '张HR', 'hr@company.com', '13800000001',
+    '$2b$12$IlEBGdtiluBEo.SQEaw.Oem4hwRrogY0Yg9CgAzMfvuaZcuH5Ic/S',
+    'hr_specialist', 'root', 'M2',
+    '2024-03-01', '总部', 'married', 'active'
+) ON DUPLICATE KEY UPDATE name = VALUES(name);
+
 -- 3.3 预置分类
 INSERT INTO categories (category_id, name, parent_id, type, access_level, sort_order) VALUES
+    -- 文档分类（制度文档）
     ('cat_doc_root', '制度文档', NULL, 'document', 'all_roles', 0),
     ('cat_doc_salary', '薪酬制度', 'cat_doc_root', 'document', 'hr_admin_only', 1),
     ('cat_doc_leave', '休假制度', 'cat_doc_root', 'document', 'all_roles', 2),
     ('cat_doc_perf', '绩效制度', 'cat_doc_root', 'document', 'all_roles', 3),
     ('cat_doc_benefit', '福利制度', 'cat_doc_root', 'document', 'all_roles', 4),
-    ('cat_faq_root', '常见问题', NULL, 'faq', 'all_roles', 10),
-    ('cat_faq_salary', '薪酬FAQ', 'cat_faq_root', 'faq', 'hr_admin_only', 11),
-    ('cat_faq_leave', '休假FAQ', 'cat_faq_root', 'faq', 'all_roles', 12),
-    ('cat_faq_perf', '绩效FAQ', 'cat_faq_root', 'faq', 'all_roles', 13)
+    ('cat_doc_recruit', '招聘制度', 'cat_doc_root', 'document', 'all_roles', 5),
+    ('cat_doc_train', '培训制度', 'cat_doc_root', 'document', 'all_roles', 6),
+    ('cat_doc_attend', '考勤制度', 'cat_doc_root', 'document', 'all_roles', 7),
+    ('cat_doc_contract', '劳动合同', 'cat_doc_root', 'document', 'hr_admin_only', 8),
+    ('cat_doc_insurance', '社保公积金', 'cat_doc_root', 'document', 'all_roles', 9),
+    ('cat_doc_handbook', '员工手册', 'cat_doc_root', 'document', 'all_roles', 10),
+    ('cat_doc_reward', '奖惩制度', 'cat_doc_root', 'document', 'all_roles', 11),
+    ('cat_doc_promote', '晋升制度', 'cat_doc_root', 'document', 'all_roles', 12),
+    ('cat_doc_offboard', '离职制度', 'cat_doc_root', 'document', 'hr_admin_only', 13),
+    ('cat_doc_safe', '安全生产', 'cat_doc_root', 'document', 'all_roles', 14),
+    -- FAQ分类
+    ('cat_faq_root', '常见问题', NULL, 'faq', 'all_roles', 50),
+    ('cat_faq_salary', '薪酬FAQ', 'cat_faq_root', 'faq', 'hr_admin_only', 51),
+    ('cat_faq_leave', '休假FAQ', 'cat_faq_root', 'faq', 'all_roles', 52),
+    ('cat_faq_perf', '绩效FAQ', 'cat_faq_root', 'faq', 'all_roles', 53),
+    ('cat_faq_benefit', '福利FAQ', 'cat_faq_root', 'faq', 'all_roles', 54),
+    ('cat_faq_recruit', '招聘FAQ', 'cat_faq_root', 'faq', 'all_roles', 55),
+    ('cat_faq_train', '培训FAQ', 'cat_faq_root', 'faq', 'all_roles', 56)
 ON DUPLICATE KEY UPDATE name = VALUES(name);
+
+-- 3.4 预置FAQ（常见问题及答案）
+INSERT INTO faqs (faq_id, question, answer, category_id, related_doc_id, keywords, view_count, status, created_by) VALUES
+    -- 考勤FAQ
+    ('faq-attend-01', '每天的上下班时间是什么？',
+     '公司实行标准工时制，每日工作时间为上午09:00—12:00，下午13:00—18:00（含午休1小时），每日标准工作时长为8小时。部分岗位经部门负责人批准可实行弹性工作制，核心工作时间为10:00—16:00。',
+     'cat_faq_root', NULL, '上下班 时间 考勤', 0, 'active', 'user-admin-001'),
+    ('faq-attend-02', '迟到会有什么处罚？',
+     '月累计迟到1-2次给予口头提醒；3-5次每次扣款30元并书面警告；6次及以上视为严重违纪，扣发当月全勤奖并纳入绩效考核负面记录。迟到超过30分钟以上且未说明合理理由的按旷工半天处理。',
+     'cat_faq_root', NULL, '迟到 处罚 扣款', 0, 'active', 'user-admin-001'),
+    ('faq-attend-03', '如何申请加班？',
+     '加班须提前填写《加班申请单》，经部门负责人审批后报人力资源部备案，未经审批的不视为加班。平时延长工作时间按150%支付加班工资，休息日加班按200%支付（或安排调休），法定节假日按300%支付。',
+     'cat_faq_root', NULL, '加班 申请 加班费', 0, 'active', 'user-admin-001'),
+
+    -- 薪酬FAQ
+    ('faq-salary-01', '工资什么时候发放？',
+     '公司实行月薪制，每月15日发放上月工资（遇节假日顺延）。工资包括基本工资、岗位津贴、绩效工资等组成部分。',
+     'cat_faq_salary', NULL, '工资 发放 时间 发薪日', 0, 'active', 'user-admin-001'),
+    ('faq-salary-02', '什么是全勤奖？如何获得？',
+     '当月无迟到、早退、旷工、请假（年假除外）记录的员工可享受全勤奖200元/月。法定假期（年假、婚假、产假、丧假等）不影响全勤奖。',
+     'cat_faq_salary', NULL, '全勤奖 条件 金额', 0, 'active', 'user-admin-001'),
+
+    -- 休假FAQ
+    ('faq-leave-01', '年假有多少天？怎么计算？',
+     '员工累计工作满1年不满10年的，年休假5天；满10年不满20年的，年休假10天；满20年的，年休假15天。年假须提前5个工作日申请，经部门负责人审批后执行。',
+     'cat_faq_leave', NULL, '年假 休假 天数 计算', 0, 'active', 'user-admin-001'),
+    ('faq-leave-02', '婚假、产假怎么规定的？',
+     '员工依法办理结婚登记的享受婚假3天；女职工生育享受不少于98天产假，难产或多胞胎生育的按国家规定增加；男职工享陪产假15天。',
+     'cat_faq_leave', NULL, '婚假 产假 陪产假', 0, 'active', 'user-admin-001'),
+    ('faq-leave-03', '病假和事假有什么区别？',
+     '病假需凭医院证明申请，公司给予每年5天全薪病假，超出部分按薪酬制度执行。事假为无薪假期，须提前申请并获批准，原则上每月不超过2天。',
+     'cat_faq_leave', NULL, '病假 事假 区别', 0, 'active', 'user-admin-001'),
+
+    -- 福利FAQ
+    ('faq-benefit-01', '公司有哪些福利？',
+     '公司福利包括：五险一金、补充医疗保险（年度报销上限2万元）、意外伤害保险（保额20万）、年度健康体检、节日福利（300-500元/人）、生日礼金200元、结婚礼金1000元、住房补贴（500-1500元/月）、员工心理援助计划（EAP）等。',
+     'cat_faq_benefit', NULL, '福利 五险一金 保险 体检 补贴', 0, 'active', 'user-admin-001'),
+    ('faq-benefit-02', '年度体检什么时候安排？',
+     '公司每年组织一次员工健康体检，具体时间由人力资源部统一安排并提前通知。体检费用由公司承担：普通员工800元/人，40岁以上员工1200元/人。',
+     'cat_faq_benefit', NULL, '体检 安排 时间', 0, 'active', 'user-admin-001'),
+
+    -- 绩效FAQ
+    ('faq-perf-01', '绩效考核怎么评定？',
+     '绩效考核采用季度考核与年度考核相结合的方式。考核指标包括工作业绩（60%）、工作能力（20%）、工作态度（20%）三个维度。考核结果分为S/A/B/C/D五个等级，直接关联晋升和奖金。',
+     'cat_faq_perf', NULL, '绩效 考核 评定 等级', 0, 'active', 'user-admin-001'),
+    ('faq-perf-02', '晋升需要什么条件？',
+     '晋升需满足：1）在当前岗位任职满1年以上；2）近两次绩效考核评级均在A级以上；3）通过晋升评审委员会评审。职级每晋升一级，基本工资相应上调10%-20%。',
+     'cat_faq_perf', NULL, '晋升 条件 职级', 0, 'active', 'user-admin-001')
+ON DUPLICATE KEY UPDATE question = VALUES(question);
 
 -- 3.4 敏感度配置（预置常用字段）
 INSERT INTO employee_data_sensitivity (field_name, field_label, sensitivity_level, source_table, source_column) VALUES

@@ -50,10 +50,18 @@ request.interceptors.response.use(
         || error.message
         || '网络错误'
     if (status === 401) {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('user_info')
-      window.location.href = '/login'
+      // 认证接口（登录/注册）返回 401 表示"账号或密码错误"，应弹出提示而非跳转；
+      // 其它接口的 401 才是 token 失效，需清除登录态并跳回登录页。
+      const reqUrl = error.config?.url || ''
+      const isAuthApi = reqUrl.includes('/auth/login') || reqUrl.includes('/auth/register')
+      if (isAuthApi) {
+        ElMessage.error(message)
+      } else {
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        localStorage.removeItem('user_info')
+        window.location.href = '/login'
+      }
     } else if (status === 403) {
       ElMessage.error('无权限访问该资源')
     } else if (status === 429) {

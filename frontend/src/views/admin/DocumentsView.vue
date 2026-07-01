@@ -83,7 +83,7 @@
         <el-table-column label="更新时间" width="120">
           <template #default="{ row }">{{ row.updated_at?.slice(0, 10) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openEditDialog(row)">编辑</el-button>
             <el-button link type="warning" size="small" @click="openAccessDialog(row)">权限</el-button>
@@ -94,6 +94,15 @@
               @click="handleArchive(row)"
             >
               {{ row.status === 'archived' ? '恢复' : '归档' }}
+            </el-button>
+            <el-button
+              v-if="authStore.isAdmin"
+              link
+              type="danger"
+              size="small"
+              @click="handleDelete(row)"
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -242,10 +251,15 @@ import {
   createDocument,
   updateDocument,
   archiveDocument,
+  restoreDocument,
+  deleteDocument,
   updateDocumentAccess,
 } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules, UploadFile } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
 
 // ── 搜索与筛选 ──
 const searchText = ref('')
@@ -342,7 +356,7 @@ async function loadDocs() {
 async function loadCategories() {
   try {
     const res = await getCategories({ type: 'document' })
-    const items = res.data?.items || []
+    const items = res.data?.data?.items || res.data?.items || []
     categories.value = [{ label: '全部分类', value: 'all' }]
     categoryOptions.value = []
     const flatten = (list: any[]) => {
@@ -436,16 +450,37 @@ async function handleSubmit() {
 
 // ── 归档/恢复 ──
 async function handleArchive(row: any) {
-  const action = row.status === 'archived' ? '恢复' : '归档'
+  const isArchived = row.status === 'archived'
+  const action = isArchived ? '恢复' : '归档'
   try {
     await ElMessageBox.confirm(
-      row.status === 'archived'
-        ? `确认恢复「${row.title}」？`
+      isArchived
+        ? `确认恢复「${row.title}」？恢复后将回到草稿状态，需重新发布以更新检索数据。`
         : `确认归档「${row.title}」？归档后不再对外可见。`,
       `确认${action}`,
     )
-    await archiveDocument(row.document_id)
+    if (isArchived) {
+      await restoreDocument(row.document_id)
+    } else {
+      await archiveDocument(row.document_id)
+    }
     ElMessage.success(`已${action}`)
+    loadDocs()
+  } catch {
+    /* cancelled or error */
+  }
+}
+
+// ── 彻底删除（仅管理员）──
+async function handleDelete(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确认彻底删除「${row.title}」？此操作将一并删除其历史版本、分块与检索索引，且无法恢复！`,
+      '危险操作',
+      { type: 'warning', confirmButtonText: '彻底删除', confirmButtonClass: 'el-button--danger' },
+    )
+    await deleteDocument(row.document_id)
+    ElMessage.success('已彻底删除')
     loadDocs()
   } catch {
     /* cancelled or error */

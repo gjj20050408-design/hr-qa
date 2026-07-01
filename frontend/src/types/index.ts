@@ -159,6 +159,7 @@ export interface ChatSession {
   session_id: string
   title: string
   created_at: string
+  is_pinned?: boolean
   messages: ChatMessage[]
 }
 
@@ -177,7 +178,44 @@ export interface Announcement {
   is_read?: boolean
 }
 
-// 纠错申请
+// 制度解读
+export interface PolicyInterpretation {
+  document_id: string
+  title: string
+  doc_version: string
+  summary: string
+  flowchart: string
+  comparison_table: string
+  key_points: string[]
+  model?: string
+  created_at?: string
+  cached?: boolean
+  degraded?: boolean
+  message?: string
+}
+
+// 权益条目
+export interface BenefitItem {
+  title: string
+  value: string
+  description: string
+  category?: string
+  source_rule?: string
+}
+
+// 个性化权益报告
+export interface BenefitReport {
+  year: number
+  user_name: string
+  department_name?: string | null
+  tenure_years?: number | null
+  items: BenefitItem[]
+  summary: string
+  model?: string
+  created_at?: string
+  cached?: boolean
+}
+
 export interface CorrectionRequest {
   request_id: string
   document_id: string

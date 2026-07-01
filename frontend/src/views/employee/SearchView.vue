@@ -108,6 +108,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { Search } from '@element-plus/icons-vue'
+import { renderMarkdown } from '@/utils/markdown'
 import { searchDocuments, getDocumentDetail } from '@/api/search'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Document as DocType } from '@/types'
@@ -127,13 +128,43 @@ const searching = ref(false)
 
 const formattedContent = computed(() => {
   if (!selectedDoc.value) return ''
-  return selectedDoc.value.content || '文档内容加载中...'
+  const raw = selectedDoc.value.content
+  if (!raw) return '文档内容加载中...'
+  // Markdown → HTML（消毒），再在文本节点上做关键词高亮
+  const html = renderMarkdown(raw)
+  return highlightHtml(html)
 })
 
+function escapeKeyword(kw: string) {
+  return kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// 卡片摘要：纯文本，直接转义高亮
 function getHighlight(text: string) {
   if (!keyword.value) return text
-  const reg = new RegExp(`(${keyword.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+  const reg = new RegExp(`(${escapeKeyword(keyword.value)})`, 'gi')
   return text.replace(reg, '<span class="search-highlight">$1</span>')
+}
+
+// 详情正文：在已渲染的 HTML 上高亮，只替换文本节点，避免破坏标签
+function highlightHtml(html: string) {
+  if (!keyword.value.trim()) return html
+  const reg = new RegExp(`(${escapeKeyword(keyword.value.trim())})`, 'gi')
+  const container = document.createElement('div')
+  container.innerHTML = html
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  const textNodes: Text[] = []
+  let node: Node | null
+  while ((node = walker.nextNode())) textNodes.push(node as Text)
+  for (const textNode of textNodes) {
+    const value = textNode.nodeValue || ''
+    if (!reg.test(value)) continue
+    reg.lastIndex = 0
+    const span = document.createElement('span')
+    span.innerHTML = value.replace(reg, '<span class="search-highlight">$1</span>')
+    textNode.replaceWith(span)
+  }
+  return container.innerHTML
 }
 
 async function selectDoc(doc: DocType) {
@@ -410,15 +441,69 @@ watch(selectedCategory, () => {
   font-size: 14px;
   color: #475569;
 }
-.detail-content :deep(h3) {
-  font-size: 18px;
+.detail-content :deep(h1),
+.detail-content :deep(h2),
+.detail-content :deep(h3),
+.detail-content :deep(h4) {
   font-weight: 700;
   color: var(--primary);
   margin-bottom: 12px;
   margin-top: 24px;
+  line-height: 1.4;
 }
+.detail-content :deep(h1) { font-size: 22px; }
+.detail-content :deep(h2) { font-size: 20px; }
+.detail-content :deep(h3) { font-size: 18px; }
+.detail-content :deep(h4) { font-size: 16px; }
 .detail-content :deep(p) {
   margin-bottom: 12px;
+}
+.detail-content :deep(ul),
+.detail-content :deep(ol) {
+  margin: 0 0 12px 0;
+  padding-left: 24px;
+}
+.detail-content :deep(li) {
+  margin-bottom: 6px;
+}
+.detail-content :deep(strong) {
+  font-weight: 600;
+  color: #334155;
+}
+.detail-content :deep(blockquote) {
+  margin: 0 0 12px 0;
+  padding: 8px 16px;
+  border-left: 3px solid var(--accent);
+  background: rgba(3, 105, 161, 0.04);
+  color: #64748b;
+}
+.detail-content :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+.detail-content :deep(th),
+.detail-content :deep(td) {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+}
+.detail-content :deep(th) {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+}
+.detail-content :deep(code) {
+  background: #f1f5f9;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.detail-content :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
 }
 .detail-content :deep(.tips-box) {
   background: rgba(3, 105, 161, 0.05);

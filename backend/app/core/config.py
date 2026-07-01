@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     RAG_TOP_K_RETRIEVAL: int = 10
     RAG_TOP_N_PROMPT: int = 5
     RAG_CHUNK_TOKEN_SIZE: int = 500
-    LLM_TIMEOUT_SECONDS: int = 5
+    LLM_TIMEOUT_SECONDS: int = 60
     LLM_CIRCUIT_BREAKER_FAILURES: int = 5
     LLM_CIRCUIT_BREAKER_TIMEOUT: int = 30
 
@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     EMBEDDING_BASE_URL: Optional[str] = None
     EMBEDDING_MODEL: str = "text-embedding-v3"
     # 本地 Embedding 配置（use_local=true 时使用本地模型，无需 API Key）
-    EMBEDDING_USE_LOCAL: bool = True
+    EMBEDDING_USE_LOCAL: bool = False
     EMBEDDING_LOCAL_MODEL: str = "BAAI/bge-small-zh-v1.5"
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8001

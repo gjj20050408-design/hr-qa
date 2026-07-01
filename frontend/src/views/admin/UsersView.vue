@@ -39,7 +39,7 @@
         <el-table-column label="入职日期" width="110">
           <template #default="{ row }">{{ row.hire_date?.slice(0, 10) || '-' }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="80">
+        <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <el-tag
               :type="row.status === 'active' ? 'success' : 'danger'"
@@ -47,6 +47,46 @@
             >
               {{ row.status === 'active' ? '正常' : '禁用' }}
             </el-tag>
+            <el-tag v-if="row.locked" type="warning" size="small" style="margin-left: 4px">
+              已锁定
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="220" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openEditDialog(row)">
+              编辑
+            </el-button>
+            <el-button
+              v-if="row.locked"
+              link
+              type="warning"
+              size="small"
+              @click="handleUnlock(row)"
+            >
+              解锁
+            </el-button>
+            <el-button link type="info" size="small" @click="handleResetPassword(row)">
+              重置密码
+            </el-button>
+            <el-button
+              v-if="row.status === 'active'"
+              link
+              type="danger"
+              size="small"
+              @click="handleDisable(row)"
+            >
+              禁用
+            </el-button>
+            <el-button
+              v-else
+              link
+              type="success"
+              size="small"
+              @click="handleEnable(row)"
+            >
+              启用
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -64,6 +104,59 @@
         />
       </div>
     </div>
+
+    <!-- 编辑用户弹窗 -->
+    <el-dialog
+      v-model="editVisible"
+      title="编辑用户"
+      width="480px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="editForm" label-width="80px">
+        <el-form-item label="工号">
+          <el-input :model-value="editForm.employee_id" disabled />
+        </el-form-item>
+        <el-form-item label="姓名">
+          <el-input v-model="editForm.name" maxlength="50" />
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="editForm.email" :placeholder="editForm.emailMasked || '未设置，留空则不修改'" />
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model="editForm.phone" :placeholder="editForm.phoneMasked || '未设置，留空则不修改'" />
+        </el-form-item>
+        <el-form-item label="部门">
+          <el-select v-model="editForm.department_id" placeholder="选择部门" style="width: 100%">
+            <el-option
+              v-for="d in departments"
+              :key="d.department_id"
+              :label="d.name"
+              :value="d.department_id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="职级">
+          <el-input v-model="editForm.job_level" />
+        </el-form-item>
+        <el-form-item label="角色">
+          <el-select v-model="editForm.role" :disabled="editForm.isSelf" style="width: 100%">
+            <el-option label="普通员工" value="employee" />
+            <el-option label="HR专员" value="hr_specialist" />
+            <el-option label="管理员" value="admin" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="editForm.status" :disabled="editForm.isSelf" style="width: 100%">
+            <el-option label="正常" value="active" />
+            <el-option label="禁用" value="disabled" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editSubmitting" @click="handleUpdate">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 导入员工弹窗 -->
     <el-dialog
@@ -141,9 +234,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { Search, Upload, UploadFilled } from '@element-plus/icons-vue'
-import { getUsers, importEmployees } from '@/api/admin'
-import { ElMessage } from 'element-plus'
+import { getUsers, importEmployees, updateUser, deleteUser, getDepartments, unlockUser, resetUserPassword } from '@/api/admin'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadFile } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
 
 // ── 搜索 ──
 const searchText = ref('')
@@ -164,6 +260,23 @@ const importResult = ref<{
   fail: number
   errors: { row: number; employee_id: string; name: string; reason: string }[]
 } | null>(null)
+
+// ── 编辑弹窗 ──
+const editVisible = ref(false)
+const editSubmitting = ref(false)
+const departments = ref<{ department_id: string; name: string }[]>([])
+const editForm = ref<any>({
+  user_id: '',
+  employee_id: '',
+  name: '',
+  email: '',
+  phone: '',
+  department_id: '',
+  job_level: '',
+  role: 'employee',
+  status: 'active',
+  isSelf: false,
+})
 
 // ── 辅助方法 ──
 function roleTagType(role: string): 'danger' | 'warning' | 'info' {
@@ -201,6 +314,147 @@ async function loadUsers() {
 function handleSearch() {
   page.value = 1
   loadUsers()
+}
+
+// ── 编辑用户 ──
+async function loadDepartments() {
+  try {
+    const res = await getDepartments()
+    const data = res.data?.data || res.data || {}
+    departments.value = data.items || []
+  } catch {
+    /* error handled by interceptor */
+  }
+}
+
+function openEditDialog(row: any) {
+  editForm.value = {
+    user_id: row.user_id,
+    employee_id: row.employee_id,
+    name: row.name || '',
+    email: '',
+    phone: '',
+    emailMasked: row.email || '',
+    phoneMasked: row.phone || '',
+    department_id: row.department_id || '',
+    job_level: row.job_level || '',
+    role: row.role || 'employee',
+    status: row.status || 'active',
+    isSelf: row.user_id === authStore.user?.user_id,
+  }
+  editVisible.value = true
+}
+
+async function handleUpdate() {
+  const f = editForm.value
+  // 仅提交有变更的字段；邮箱/手机号留空表示不修改（列表返回的是脱敏值）
+  const payload: any = {}
+  if (f.name) payload.name = f.name
+  if (f.email) payload.email = f.email
+  if (f.phone) payload.phone = f.phone
+  if (f.department_id) payload.department_id = f.department_id
+  if (f.job_level !== undefined) payload.job_level = f.job_level
+  if (!f.isSelf) {
+    payload.role = f.role
+    payload.status = f.status
+  }
+
+  editSubmitting.value = true
+  try {
+    await updateUser(f.user_id, payload)
+    ElMessage.success('用户信息已更新')
+    editVisible.value = false
+    loadUsers()
+  } catch {
+    /* error handled by interceptor */
+  } finally {
+    editSubmitting.value = false
+  }
+}
+
+async function handleDisable(row: any) {
+  if (row.user_id === authStore.user?.user_id) {
+    ElMessage.warning('不能禁用自己的账号')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定要禁用用户「${row.name}（${row.employee_id}）」吗？禁用后该用户将无法登录。`,
+      '禁用用户',
+      { type: 'warning', confirmButtonText: '确定禁用', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteUser(row.user_id)
+    ElMessage.success('用户已禁用')
+    loadUsers()
+  } catch {
+    /* error handled by interceptor */
+  }
+}
+
+async function handleEnable(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要重新启用用户「${row.name}（${row.employee_id}）」吗？启用后该用户可正常登录。`,
+      '启用用户',
+      { type: 'info', confirmButtonText: '确定启用', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await updateUser(row.user_id, { status: 'active' })
+    ElMessage.success('用户已启用')
+    loadUsers()
+  } catch {
+    /* error handled by interceptor */
+  }
+}
+
+async function handleUnlock(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要解锁用户「${row.name}（${row.employee_id}）」吗？解锁后该用户可重新尝试登录。`,
+      '解锁用户',
+      { type: 'warning', confirmButtonText: '确定解锁', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await unlockUser(row.user_id)
+    ElMessage.success('用户已解锁')
+    loadUsers()
+  } catch {
+    /* error handled by interceptor */
+  }
+}
+
+async function handleResetPassword(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要重置用户「${row.name}（${row.employee_id}）」的密码吗？密码将重置为默认密码并解除锁定。`,
+      '重置密码',
+      { type: 'warning', confirmButtonText: '确定重置', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    const res = await resetUserPassword(row.user_id)
+    const pwd = res.data?.data?.default_password || res.data?.default_password
+    ElMessageBox.alert(
+      `密码已重置为：${pwd}\n请将该密码告知用户，并提醒其登录后尽快修改。`,
+      '重置成功',
+      { confirmButtonText: '我知道了' },
+    )
+    loadUsers()
+  } catch {
+    /* error handled by interceptor */
+  }
 }
 
 // ── 导入弹窗 ──
@@ -247,7 +501,10 @@ async function handleImport() {
   }
 }
 
-onMounted(loadUsers)
+onMounted(() => {
+  loadUsers()
+  loadDepartments()
+})
 </script>
 
 <style scoped>

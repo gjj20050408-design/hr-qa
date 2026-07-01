@@ -168,7 +168,7 @@ export const useChatStore = defineStore('chat', () => {
   async function toggleFavorite(recordId: string, isFavorite: boolean): Promise<boolean> {
     try {
       const res = await toggleFavoriteApi(recordId, isFavorite)
-      return res.data?.is_favorite ?? false
+      return res.data?.data?.is_favorite ?? false
     } catch {
       return false
     }

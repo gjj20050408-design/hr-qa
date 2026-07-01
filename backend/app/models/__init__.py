@@ -11,6 +11,8 @@ from app.models.correction import CorrectionRequest
 from app.models.announcement import Announcement, AnnouncementRead
 from app.models.audit_log import AuditLog
 from app.models.employee_data_sensitivity import EmployeeDataSensitivity
+from app.models.interpretation import PolicyInterpretation
+from app.models.benefit_report import BenefitReport
 
 __all__ = [
     "Department",
@@ -27,4 +29,6 @@ __all__ = [
     "AnnouncementRead",
     "AuditLog",
     "EmployeeDataSensitivity",
+    "PolicyInterpretation",
+    "BenefitReport",
 ]

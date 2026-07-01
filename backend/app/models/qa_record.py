@@ -1,9 +1,9 @@
 """问答记录表 QARecord"""
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Text, Float, Boolean, Enum, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, String, Integer, Text, Float, Boolean, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from app.models.base import uuid4_str
+from app.models.base import uuid4_str, CaseInsensitiveEnum
 from app.enums.enums import AnswerType, FeedbackType
 
 
@@ -15,11 +15,11 @@ class QARecord(Base):
     session_id = Column(String(64), nullable=False, index=True)
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
-    answer_type = Column(Enum(AnswerType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    answer_type = Column(CaseInsensitiveEnum(AnswerType), nullable=False)
     confidence = Column(Float, nullable=True)
     reference_docs = Column(JSON, nullable=True)
     response_time_ms = Column(Integer, default=0)
-    feedback = Column(Enum(FeedbackType, values_callable=lambda obj: [e.value for e in obj]), nullable=True)
+    feedback = Column(CaseInsensitiveEnum(FeedbackType), nullable=True)
     feedback_reason = Column(String(500), nullable=True)
     is_favorite = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

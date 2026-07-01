@@ -1,5 +1,6 @@
 """EmbeddingProvider 抽象接口（支持云端API与本地模型）"""
 import logging
+import os
 from typing import Protocol, List
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,10 @@ class LocalEmbeddingProvider:
 
     def _get_model(self):
         if self._model is None:
+            # 国内环境自动使用 HuggingFace 镜像站，避免下载超时
+            if not os.environ.get("HF_ENDPOINT"):
+                os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+                logger.info("Using HF mirror: https://hf-mirror.com")
             from sentence_transformers import SentenceTransformer
             logger.info(f"Loading local embedding model: {self.model_name} (首次加载需下载)...")
             self._model = SentenceTransformer(self.model_name)

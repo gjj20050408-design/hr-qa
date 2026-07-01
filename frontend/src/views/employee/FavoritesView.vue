@@ -29,6 +29,38 @@
 
       <el-empty v-if="!favorites.length" description="暂无收藏" :image-size="80" />
     </div>
+
+    <!-- 详情对话框 -->
+    <el-dialog
+      v-model="detailVisible"
+      title="收藏详情"
+      width="640px"
+      append-to-body
+    >
+      <div v-if="detail" class="detail-body">
+        <div class="detail-block">
+          <div class="detail-label">问题</div>
+          <div class="detail-question">{{ detail.question }}</div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">回答</div>
+          <div class="detail-answer" v-html="formatAnswer(detail.answer)"></div>
+        </div>
+        <div class="detail-block" v-if="detail.reference_docs?.length">
+          <div class="detail-label">参考来源</div>
+          <ul class="detail-refs">
+            <li v-for="(ref, i) in detail.reference_docs" :key="i">
+              {{ ref.title }}<span v-if="ref.section"> · {{ ref.section }}</span>
+            </li>
+          </ul>
+        </div>
+        <div class="detail-meta">收藏于 {{ detail.created_at }}</div>
+      </div>
+      <template #footer>
+        <el-button v-if="detail" type="danger" plain @click="removeFromDetail">取消收藏</el-button>
+        <el-button @click="detailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -42,19 +74,37 @@ import { ElMessage } from 'element-plus'
 
 const chatStore = useChatStore()
 const favorites = ref<QARecord[]>([])
+const detailVisible = ref(false)
+const detail = ref<QARecord | null>(null)
 
 async function loadFavorites() {
   try {
     // 加载所有收藏的问答记录
     const res = await getQARecords({ page_size: 100 })
-    favorites.value = (res.data?.items || []).filter((r: any) => r.is_favorite)
+    favorites.value = (res.data?.data?.items || []).filter((r: any) => r.is_favorite)
   } catch {}
 }
 
 onMounted(loadFavorites)
 
+// 将答案中的换行转为 <br>，并转义 HTML 防止注入
+function formatAnswer(text: string): string {
+  const escaped = (text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  return escaped.replace(/\n/g, '<br>')
+}
+
 function viewDetail(item: QARecord) {
-  ElMessage.info('详情查看（功能待接入）')
+  detail.value = item
+  detailVisible.value = true
+}
+
+async function removeFromDetail() {
+  if (!detail.value) return
+  await removeFav(detail.value)
+  detailVisible.value = false
 }
 
 async function removeFav(item: QARecord) {
@@ -133,5 +183,42 @@ async function removeFav(item: QARecord) {
   font-size: 12px;
   color: #94a3b8;
   margin-top: 4px;
+}
+
+/* 详情对话框 */
+.detail-block {
+  margin-bottom: 18px;
+}
+.detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+.detail-question {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.6;
+}
+.detail-answer {
+  font-size: 14px;
+  color: #334155;
+  line-height: 1.7;
+  white-space: normal;
+}
+.detail-refs {
+  margin: 0;
+  padding-left: 18px;
+}
+.detail-refs li {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.6;
+}
+.detail-meta {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: right;
 }
 </style>

@@ -63,6 +63,8 @@ class DocumentService:
         db_session: AsyncSession, page: int = 1, page_size: int = 20,
         status: str = None, category_id: str = None, keyword: str = None,
     ) -> tuple:
+        from sqlalchemy.orm import selectinload
+
         conditions = []
         if status and status in [s.value for s in DocStatus]:
             conditions.append(Document.status == DocStatus(status))
@@ -71,7 +73,11 @@ class DocumentService:
         if keyword:
             conditions.append(Document.title.contains(keyword))
 
-        query = select(Document)
+        # 预加载关联关系，避免 async lazy load 报 MissingGreenlet
+        query = select(Document).options(
+            selectinload(Document.category),
+            selectinload(Document.uploader),
+        )
         for c in conditions:
             query = query.where(c)
 
@@ -179,3 +185,53 @@ class DocumentService:
         db_session.add(audit)
         await db_session.flush()
         return doc
+
+    @staticmethod
+    async def restore_document(document_id: str, user_id: str, db_session: AsyncSession) -> Document:
+        doc = await db_session.get(Document, document_id)
+        if not doc:
+            raise ValueError("文档不存在")
+        if doc.status != DocStatus.ARCHIVED:
+            raise ValueError("只有已归档的文档可以恢复")
+        doc.restore()
+
+        audit = AuditLog(
+            log_id=uuid4_str(), user_id=user_id,
+            action="document_restore", resource_type="document",
+            resource_id=document_id,
+        )
+        db_session.add(audit)
+        await db_session.flush()
+        return doc
+
+    @staticmethod
+    async def delete_document(document_id: str, user_id: str, db_session: AsyncSession) -> str:
+        """彻底删除文档（物理删除，含版本/分块/向量索引，不可恢复）
+
+        数据库层面：documents 的子表（document_versions / document_chunks /
+        corrections）均配置了 ON DELETE CASCADE，FAQ.related_doc_id 为 SET NULL，
+        故仅需删除主行即可级联清理。向量库需单独清理。
+        """
+        doc = await db_session.get(Document, document_id)
+        if not doc:
+            raise ValueError("文档不存在")
+
+        title = doc.title
+
+        # 清理检索向量索引
+        try:
+            from app.providers.vector_store import vector_store
+            vector_store.delete(document_id)
+        except Exception:
+            pass
+
+        await db_session.delete(doc)
+
+        audit = AuditLog(
+            log_id=uuid4_str(), user_id=user_id,
+            action="document_delete", resource_type="document",
+            resource_id=document_id,
+        )
+        db_session.add(audit)
+        await db_session.flush()
+        return title

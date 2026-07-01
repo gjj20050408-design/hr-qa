@@ -49,12 +49,31 @@
             <p class="notify-desc">{{ item.content }}</p>
             <div class="notify-meta">
               <span>{{ item.publisher_name || '系统' }} · {{ item.published_at?.slice(0, 16) }}</span>
-              <el-button link type="primary" size="small">查看详情</el-button>
+              <el-button link type="primary" size="small" @click.stop="openDetail(item)">查看详情</el-button>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- 公告详情弹窗 -->
+    <el-dialog v-model="detailVisible" :title="detail?.title || '公告详情'" width="600px">
+      <div v-if="detail" class="detail-body">
+        <div class="detail-tags">
+          <el-tag
+            :type="detail.priority === 'urgent' ? 'danger' : detail.priority === 'important' ? 'warning' : 'info'"
+            size="small"
+          >
+            {{ priorityLabel(detail.priority) }}
+          </el-tag>
+          <span class="detail-meta">{{ detail.publisher_name || '系统' }} · {{ detail.published_at?.slice(0, 16) }}</span>
+        </div>
+        <div class="detail-content">{{ detail.content }}</div>
+        <div v-if="detailAttachment" class="detail-attachment">
+          <el-link type="primary" :href="detailAttachment" target="_blank">下载附件</el-link>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -66,6 +85,17 @@ import { ElMessage } from 'element-plus'
 
 const filter = ref('all')
 const notifications = ref<Announcement[]>([])
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detail = ref<Announcement | null>(null)
+const detailAttachment = computed(() => (detail.value as any)?.attachment || '')
+
+function openDetail(item: Announcement) {
+  detail.value = item
+  detailVisible.value = true
+  handleRead(item)
+}
 
 async function loadNotifications() {
   try {
@@ -248,5 +278,28 @@ async function markAllRead() {
   align-items: center;
   font-size: 12px;
   color: #94a3b8;
+}
+
+/* 详情弹窗 */
+.detail-tags {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.detail-meta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.detail-content {
+  font-size: 14px;
+  color: #334155;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+.detail-attachment {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
 }
 </style>

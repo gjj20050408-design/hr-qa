@@ -40,9 +40,10 @@
           <span>{{ item.label }}</span>
         </router-link>
 
-        <div class="nav-section-title">系统管理</div>
+        <template v-if="systemNav.length > 0">
+          <div class="nav-section-title">系统管理</div>
 
-        <router-link
+          <router-link
           v-for="item in systemNav"
           :key="item.key"
           :to="item.route"
@@ -52,6 +53,7 @@
           <component :is="item.icon" class="nav-icon" />
           <span>{{ item.label }}</span>
         </router-link>
+        </template>
       </nav>
 
       <div class="sidebar-footer">
@@ -67,8 +69,11 @@
       <header class="admin-header">
         <h2>{{ pageTitle }}</h2>
         <div class="header-user">
-          <el-avatar :size="28" class="admin-avatar">管</el-avatar>
-          <span>系统管理员</span>
+          <el-avatar :size="28" class="admin-avatar">
+            {{ authStore.user?.name?.charAt(0) || '管' }}
+          </el-avatar>
+          <span>{{ authStore.user?.name || '管理员' }}</span>
+          <span class="header-role-tag">{{ roleLabel }}</span>
         </div>
       </header>
 
@@ -80,14 +85,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { getCorrections } from '@/api/admin'
 import {
   Document, Back, Grid, Files, QuestionFilled,
   CircleCheck, Lock, Bell, User, List
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const authStore = useAuthStore()
+
+const pendingCorrections = ref(0)
 
 const pageTitle = computed(() => {
   const map: Record<string, string> = {
@@ -104,22 +114,53 @@ const pageTitle = computed(() => {
   return map[key] || '管理后台'
 })
 
-const coreNav = [
+const roleLabel = computed(() => {
+  const map: Record<string, string> = {
+    admin: '系统管理员',
+    hr_specialist: 'HR专员',
+    employee: '普通员工',
+  }
+  return map[authStore.user?.role || ''] || '普通员工'
+})
+
+const coreNav = computed(() => [
   { key: 'dashboard', label: '数据驾驶舱', route: '/admin/dashboard', icon: Grid },
   { key: 'documents', label: '文档管理', route: '/admin/documents', icon: Files },
   { key: 'faqs', label: 'FAQ 管理', route: '/admin/faqs', icon: QuestionFilled },
-  { key: 'corrections', label: '纠错审核', route: '/admin/corrections', icon: CircleCheck, badge: '3' },
+  { key: 'corrections', label: '纠错审核', route: '/admin/corrections', icon: CircleCheck, badge: pendingCorrections.value > 0 ? pendingCorrections.value : 0 },
   { key: 'categories', label: '分类权限', route: '/admin/categories', icon: Lock },
-]
+])
 
 const contentNav = [
   { key: 'announcements', label: '通知公告', route: '/admin/announcements', icon: Bell },
 ]
 
-const systemNav = [
+// 仅系统管理员可见的菜单项
+const allSystemNav = [
   { key: 'users', label: '用户管理', route: '/admin/users', icon: User },
   { key: 'audit', label: '审计日志', route: '/admin/audit', icon: List },
 ]
+
+// HR专员不显示系统管理菜单
+const systemNav = computed(() => {
+  if (authStore.isAdmin) {
+    return allSystemNav
+  }
+  return []
+})
+
+// 加载待审核纠错数量，用于侧边栏徽标（为 0 时不显示）
+async function loadPendingCorrections() {
+  try {
+    const res = await getCorrections({ status: 'pending', page_size: 1 })
+    const data = res.data?.data || res.data || {}
+    pendingCorrections.value = data.pagination?.total || data.items?.length || 0
+  } catch {
+    pendingCorrections.value = 0
+  }
+}
+
+onMounted(loadPendingCorrections)
 </script>
 
 <style scoped>
@@ -202,7 +243,12 @@ const systemNav = [
   color: var(--accent);
   font-weight: 600;
 }
-.nav-icon { flex-shrink: 0; }
+.nav-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
 
 .nav-badge {
   margin-left: auto;
@@ -272,6 +318,13 @@ const systemNav = [
   color: white !important;
   font-weight: 600;
   font-size: 12px;
+}
+.header-role-tag {
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 2px 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
 }
 
 .admin-content {

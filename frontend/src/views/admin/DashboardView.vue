@@ -60,6 +60,84 @@
         </div>
       </el-col>
     </el-row>
+
+    <!-- 待优化问题：答不出/被评无帮助的高频提问 → 一键生成 FAQ 草稿 -->
+    <el-row :gutter="16" class="chart-row">
+      <el-col :span="24">
+        <div class="chart-card">
+          <div class="section-head">
+            <h3>待优化问题（知识盲区）</h3>
+            <span class="section-hint">来自答不出或被评"没帮助"的真实提问，可一键生成 FAQ 补齐</span>
+          </div>
+          <el-table :data="faqCandidates" stripe v-loading="candidatesLoading" empty-text="暂无待优化问题">
+            <el-table-column type="index" label="#" width="50" />
+            <el-table-column prop="question" label="问题" min-width="240" show-overflow-tooltip />
+            <el-table-column label="出现次数" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag type="danger" size="small">{{ row.count }} 次</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="答不出" width="90" align="center">
+              <template #default="{ row }">{{ row.no_result_count || 0 }}</template>
+            </el-table-column>
+            <el-table-column label="评为无用" width="90" align="center">
+              <template #default="{ row }">{{ row.not_helpful_count || 0 }}</template>
+            </el-table-column>
+            <el-table-column label="最近提问" width="170">
+              <template #default="{ row }">{{ row.last_asked?.slice(0, 19).replace('T', ' ') || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="140" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" size="small" @click="openDraftDialog(row)">
+                  生成FAQ草稿
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-col>
+    </el-row>
+
+    <!-- FAQ 草稿弹窗：LLM 生成后 HR 审核编辑再发布 -->
+    <el-dialog v-model="draftVisible" title="生成 FAQ 草稿" width="640px" :close-on-click-modal="false">
+      <div v-loading="draftGenerating" :element-loading-text="draftGenerating ? 'AI 正在依据制度文档生成草稿...' : ''">
+        <el-form :model="draftForm" label-width="80px">
+          <el-form-item label="问题">
+            <el-input v-model="draftForm.question" maxlength="500" />
+          </el-form-item>
+          <el-form-item label="答案">
+            <el-input v-model="draftForm.answer" type="textarea" :rows="6" />
+          </el-form-item>
+          <el-form-item label="关键词">
+            <el-input v-model="draftForm.keywords" placeholder="逗号分隔" />
+          </el-form-item>
+          <el-form-item label="分类">
+            <el-select v-model="draftForm.category_id" placeholder="选择 FAQ 分类" style="width: 100%">
+              <el-option
+                v-for="c in categories"
+                :key="c.category_id"
+                :label="c.name"
+                :value="c.category_id"
+              />
+            </el-select>
+          </el-form-item>
+          <p v-if="draftForm._model" class="draft-model-hint">
+            本草稿由模型 {{ draftForm._model }} 依据现有制度文档生成，请人工核对后再发布。
+          </p>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="draftVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="draftPublishing"
+          :disabled="draftGenerating || !draftForm.answer || !draftForm.category_id"
+          @click="handlePublishDraft"
+        >
+          发布为 FAQ
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -67,7 +145,8 @@
 import { ref, onMounted, onUnmounted, nextTick, reactive } from 'vue'
 import * as echarts from 'echarts'
 import { ChatDotRound, UserFilled, Files, QuestionFilled } from '@element-plus/icons-vue'
-import { getDashboard } from '@/api/admin'
+import { getDashboard, getFaqCandidates, generateFaqDraft, getCategories, createFAQ } from '@/api/admin'
+import { ElMessage } from 'element-plus'
 
 const trendChartRef = ref<HTMLElement>()
 const pieChartRef = ref<HTMLElement>()
@@ -90,19 +169,21 @@ const dashboardData = ref<any>(null)
 async function loadDashboard() {
   try {
     const res = await getDashboard('7d')
-    const d = res.data || {}
+    const d = res.data?.data || res.data || {}
     dashboardData.value = d
     statCards[0].value = d.total_questions || 0
-    statCards[1].value = d.active_users || 0
+    statCards[1].value = d.total_users || 0
     statCards[2].value = d.total_documents || 0
     statCards[3].value = d.total_faqs || 0
-    if (d.daily_trend) {
-      statCards[0].change = d.today_questions ? `今日 ${d.today_questions} 次` : '加载中...'
-    }
-    if (d.hot_topics) {
-      const maxCount = Math.max(...d.hot_topics.map((h: any) => h.count || 0), 1)
-      hotQuestions.value = d.hot_topics.map((h: any) => ({
-        question: h.topic || h.keyword || '',
+    statCards[0].change = d.today_questions != null ? `今日 ${d.today_questions} 次` : '—'
+    statCards[1].change = `共 ${d.total_users || 0} 名用户`
+    statCards[2].change = `已发布 ${d.total_documents || 0} 篇`
+    statCards[3].change = d.faq_match_rate != null ? `匹配率 ${d.faq_match_rate}%` : `共 ${d.total_faqs || 0} 条`
+    // 热门问题 TOP10：取自用户在 AI 问答中真实提出的问题（按出现次数）
+    if (d.hot_search_terms) {
+      const maxCount = Math.max(...d.hot_search_terms.map((h: any) => h.count || 0), 1)
+      hotQuestions.value = d.hot_search_terms.map((h: any) => ({
+        question: h.term || '',
         count: h.count || 0,
         percent: Math.round((h.count || 0) / maxCount * 100) + '%',
       }))
@@ -152,7 +233,7 @@ function initPieChart() {
   if (!pieChartRef.value) return
   pieChart = echarts.init(pieChartRef.value)
   const d = dashboardData.value
-  const typeDist = d?.type_distribution || {}
+  const typeDist = d?.answer_type_distribution || {}
   const pieData = Object.entries(typeDist).map(([name, value]) => ({
     name: { faq: 'FAQ匹配', search: '全文搜索', rule: '规则匹配', rag: 'RAG', no_result: '未找到' }[name] || name,
     value,
@@ -173,8 +254,8 @@ function initCategoryChart() {
   if (!categoryChartRef.value) return
   categoryChart = echarts.init(categoryChartRef.value)
   const d = dashboardData.value
-  const catDist = d?.category_distribution || {}
-  const catData = Object.entries(catDist).map(([name, value]) => [name, value])
+  const catDist = d?.category_distribution || []
+  const catData = (Array.isArray(catDist) ? catDist : []).map((c: any) => [c.category_name || c.category_id || '未分类', c.count || 0])
   categoryChart.setOption({
     tooltip: { trigger: 'axis' },
     grid: { left: 100, right: 20, top: 10, bottom: 20 },
@@ -191,6 +272,8 @@ function initCategoryChart() {
 
 onMounted(async () => {
   await loadDashboard()
+  loadCandidates()
+  loadCategories()
   window.addEventListener('resize', handleResize)
 })
 
@@ -206,10 +289,129 @@ function handleResize() {
   pieChart?.resize()
   categoryChart?.resize()
 }
+
+// ── 待优化问题 → FAQ 草稿 ──
+const faqCandidates = ref<any[]>([])
+const candidatesLoading = ref(false)
+const categories = ref<any[]>([])
+
+const draftVisible = ref(false)
+const draftGenerating = ref(false)
+const draftPublishing = ref(false)
+const draftForm = reactive<any>({
+  question: '',
+  answer: '',
+  keywords: '',
+  category_id: '',
+  related_doc_id: null,
+  _model: '',
+})
+
+async function loadCandidates() {
+  candidatesLoading.value = true
+  try {
+    const res = await getFaqCandidates(10)
+    const d = res.data?.data || res.data || {}
+    faqCandidates.value = d.items || []
+  } catch {
+    /* error handled by interceptor */
+  } finally {
+    candidatesLoading.value = false
+  }
+}
+
+async function loadCategories() {
+  try {
+    const res = await getCategories({ type: 'faq' })
+    const d = res.data?.data || res.data || {}
+    const items = d.items || []
+    // 分类接口返回的是树，拍平成下拉可用的扁平列表（与 FAQ 管理页一致）
+    const flat: any[] = []
+    const flatten = (list: any[]) => {
+      list.forEach((c) => {
+        flat.push({ category_id: c.category_id, name: c.name })
+        if (c.children) flatten(c.children)
+      })
+    }
+    flatten(items)
+    categories.value = flat
+  } catch {
+    /* error handled by interceptor */
+  }
+}
+
+async function openDraftDialog(row: any) {
+  // 先带上原问题打开弹窗，再异步向 LLM 请求草稿
+  draftForm.question = row.question
+  draftForm.answer = ''
+  draftForm.keywords = ''
+  draftForm.category_id = categories.value[0]?.category_id || ''
+  draftForm.related_doc_id = null
+  draftForm._model = ''
+  draftVisible.value = true
+
+  draftGenerating.value = true
+  try {
+    const res = await generateFaqDraft(row.question)
+    const d = res.data?.data || res.data || {}
+    draftForm.question = d.question || row.question
+    draftForm.answer = d.answer || ''
+    draftForm.keywords = d.keywords || ''
+    draftForm.related_doc_id = d.related_doc_id || null
+    draftForm._model = d._model || ''
+  } catch {
+    // LLM 不可用时保留问题，允许 HR 手动填写答案
+  } finally {
+    draftGenerating.value = false
+  }
+}
+
+async function handlePublishDraft() {
+  if (!draftForm.answer || !draftForm.category_id) {
+    ElMessage.warning('答案和分类不能为空')
+    return
+  }
+  draftPublishing.value = true
+  try {
+    await createFAQ({
+      question: draftForm.question,
+      answer: draftForm.answer,
+      category_id: draftForm.category_id,
+      related_doc_id: draftForm.related_doc_id || undefined,
+      keywords: draftForm.keywords || undefined,
+    })
+    ElMessage.success('FAQ 已发布')
+    draftVisible.value = false
+    loadCandidates()
+  } catch {
+    /* error handled by interceptor */
+  } finally {
+    draftPublishing.value = false
+  }
+}
+
+// ── 待优化问题 → FAQ 草稿 结束 ──
 </script>
 
 <style scoped>
 .dashboard { max-width: 1400px; }
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.section-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #909399);
+}
+.draft-model-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #909399);
+  margin: 0;
+}
 
 .stat-row { margin-bottom: 24px; }
 

@@ -86,7 +86,7 @@ class CircuitBreakerLLMProvider:
 class OpenAILLMProvider:
     """二期实现：对接 OpenAI 兼容 API（支持Qwen/GLM等）"""
 
-    def __init__(self, api_key: str, base_url: str, model: str, timeout: int = 5):
+    def __init__(self, api_key: str, base_url: str, model: str, timeout: int = 120):
         self.api_key = api_key
         self.base_url = base_url
         self.model = model
@@ -128,7 +128,12 @@ class OpenAILLMProvider:
             return self._health_cache
         try:
             import openai
-            client = openai.OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=3)
+            # 健康探测必须快速失败：max_retries=0 避免连接超时时重试 2 次
+            # 造成 ~10s 阻塞；失败后由下方 30s 缓存兜底，不会频繁重连。
+            client = openai.OpenAI(
+                api_key=self.api_key, base_url=self.base_url,
+                timeout=3, max_retries=0,
+            )
             client.models.list()
             self._health_cache = True
         except Exception:

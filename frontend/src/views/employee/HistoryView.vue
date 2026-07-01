@@ -88,8 +88,8 @@ async function loadRecords() {
     const params: any = { page: currentPage.value, page_size: pageSize.value }
     if (typeFilter.value !== 'all') params.answer_type = typeFilter.value
     const res = await getQARecords(params)
-    records.value = res.data?.items || []
-    total.value = res.data?.pagination?.total || 0
+    records.value = res.data?.data?.items || []
+    total.value = res.data?.data?.pagination?.total || 0
   } catch {}
 }
 

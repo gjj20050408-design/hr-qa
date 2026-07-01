@@ -1,9 +1,9 @@
 """FAQ 表"""
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Text, Enum, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from app.models.base import uuid4_str
+from app.models.base import uuid4_str, CaseInsensitiveEnum
 from app.enums.enums import FAQStatus
 
 
@@ -17,7 +17,7 @@ class FAQ(Base):
     related_doc_id = Column(String(64), ForeignKey("documents.document_id", ondelete="SET NULL"), nullable=True)
     keywords = Column(String(500), nullable=True)
     view_count = Column(Integer, default=0)
-    status = Column(Enum(FAQStatus, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=FAQStatus.ACTIVE)
+    status = Column(CaseInsensitiveEnum(FAQStatus), nullable=False, default=FAQStatus.ACTIVE)
     created_by = Column(String(64), ForeignKey("users.user_id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

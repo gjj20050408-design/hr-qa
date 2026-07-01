@@ -90,7 +90,7 @@ class FAQMatcher(QAHandler):
                 best = faq
 
         if best and best_score >= QA_THRESHOLDS["faq_similarity_min"]:
-            best.view_count += 1
+            best.view_count = (best.view_count or 0) + 1
             ctx.answer = best.answer
             ctx.answer_type = AnswerType.FAQ
             ctx.reference_docs = [{"doc_id": best.related_doc_id, "title": "FAQ标准答案"}]
@@ -175,7 +175,9 @@ class PermissionFilter(QAHandler):
 
 
 class SearchHandler(QAHandler):
-    """⑤ 全文搜索处理器"""
+    """⑤ 全文搜索处理器 — 收集候选文档，不阻断链路，交由 RAG 生成自然语言"""
+
+    SEARCH_RESULTS_KEY = "_search_snippets"
 
     async def handle(self, ctx: QAContext, db_session: AsyncSession) -> QAContext:
         from sqlalchemy.orm import selectinload
@@ -205,10 +207,12 @@ class SearchHandler(QAHandler):
                     "category": doc.category.name if doc.category else "",
                     "version": doc.version,
                 })
-            ctx.answer = json.dumps(snippets, ensure_ascii=False)
-            ctx.answer_type = AnswerType.SEARCH
-            ctx.reference_docs = [{"doc_id": s["document_id"], "title": s["title"]} for s in snippets]
-            ctx.is_done = True
+            # 搜索结果存入上下文供后续处理器（如 RAG）参考，不阻断链路
+            setattr(ctx, self.SEARCH_RESULTS_KEY, snippets)
+            # reference_docs 预先填充，RAG 可覆盖
+            ctx.reference_docs = [{"doc_id": s["document_id"], "title": s["title"], "section": s["snippet"][:100]} for s in snippets]
+
+        # 继续传递到下一个处理器（RAG），不在此处终止链路
         return await self.handle_next(ctx, db_session)
 
 
@@ -264,8 +268,9 @@ class RAGHandler(QAHandler):
             # Step 3: 权限过滤 - 加载文档并检查权限
             doc_ids = list(set(c.document_id for c in chunks))
             if doc_ids:
+                from sqlalchemy.orm import selectinload
                 result = await db_session.execute(
-                    select(Document).where(Document.document_id.in_(doc_ids))
+                    select(Document).options(selectinload(Document.category)).where(Document.document_id.in_(doc_ids))
                 )
                 docs = {d.document_id: d for d in result.scalars().all()}
 
@@ -292,7 +297,7 @@ class RAGHandler(QAHandler):
             for i, chunk in enumerate(allowed_chunks[:n_prompt]):
                 doc = docs.get(chunk.document_id) if doc_ids else None
                 title = doc.title if doc else f"文档-{chunk.document_id[:8]}"
-                content = (chunk.content or "")[:2000]
+                content = (chunk.content or "")[:800]
                 context_parts.append(f"[来源{i+1}: {title}]\n{content}")
 
             context_text = "\n\n---\n\n".join(context_parts)
@@ -317,7 +322,14 @@ class RAGHandler(QAHandler):
 
             ctx.answer = llm_response.content
             ctx.answer_type = AnswerType.RAG
-            ctx.reference_docs = [{"doc_id": c.document_id, "title": "RAG检索结果"} for c in allowed_chunks[:n_prompt]]
+            ctx.reference_docs = [
+                {
+                    "doc_id": c.document_id,
+                    "title": docs.get(c.document_id).title if docs.get(c.document_id) else f"文档-{c.document_id[:8]}",
+                    "section": (c.content or "")[:100],
+                }
+                for c in allowed_chunks[:n_prompt]
+            ]
             ctx.confidence = 0.85 if llm_response.content else 0.5
             ctx.is_done = True
 
@@ -484,28 +496,9 @@ class PersonalDataGuard(QAHandler):
 
     @staticmethod
     def _parse_llm_json(content: str) -> Optional[dict]:
-        """从LLM响应中解析JSON（处理可能的markdown包裹）"""
-        import re as _re
-        # 尝试直接解析
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-        # 尝试提取 ```json ... ``` 代码块
-        m = _re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, _re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(1).strip())
-            except json.JSONDecodeError:
-                pass
-        # 尝试提取第一个 { ... } 块
-        m = _re.search(r'\{.*\}', content, _re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(0))
-            except json.JSONDecodeError:
-                pass
-        return None
+        """从LLM响应中解析JSON（委托至公共工具模块）"""
+        from app.utils.llm_json import parse_llm_json
+        return parse_llm_json(content)
 
     async def _audit(self, ctx: QAContext, extraction: dict, db_session: AsyncSession) -> QAContext:
         """主审核方法 (PRD FR-10.3 审核流程)

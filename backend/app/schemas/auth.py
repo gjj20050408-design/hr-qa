@@ -67,6 +67,39 @@ class ChangePasswordRequest(BaseModel):
         return v
 
 
+class UserUpdateRequest(BaseModel):
+    """管理员修改用户信息请求（仅传需要修改的字段）"""
+    name: Optional[str] = Field(None, min_length=2, max_length=50, description="姓名")
+    email: Optional[str] = Field(None, description="邮箱")
+    phone: Optional[str] = Field(None, description="手机号")
+    role: Optional[str] = Field(None, description="角色：employee/hr_specialist/admin")
+    department_id: Optional[str] = Field(None, description="部门ID")
+    job_level: Optional[str] = Field(None, description="职级")
+    status: Optional[str] = Field(None, description="状态：active/disabled")
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        from app.enums.enums import Role
+        try:
+            return Role(v).value
+        except ValueError:
+            raise ValueError("角色不合法")
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        from app.enums.enums import UserStatus
+        try:
+            return UserStatus(v).value
+        except ValueError:
+            raise ValueError("状态不合法")
+
+
 class TokenResponse(BaseModel):
     """Token 响应"""
     access_token: str

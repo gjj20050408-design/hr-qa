@@ -1,9 +1,9 @@
 """制度文档表 Document — 含权限解析逻辑"""
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, Text, Enum, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from app.models.base import uuid4_str
+from app.models.base import uuid4_str, CaseInsensitiveEnum
 from app.enums.enums import (
     DocFormat, DocStatus, DocAccessLevel, AccessLevel, EmbeddingStatus,
 )
@@ -18,11 +18,11 @@ class Document(Base):
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
     category_id = Column(String(64), ForeignKey("categories.category_id"), nullable=False)
-    format = Column(Enum(DocFormat, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    format = Column(CaseInsensitiveEnum(DocFormat), nullable=False)
     version = Column(String(10), nullable=False, default="1.0")
     version_note = Column(String(500), nullable=True)
-    status = Column(Enum(DocStatus, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=DocStatus.DRAFT)
-    access_level = Column(Enum(DocAccessLevel, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=DocAccessLevel.INHERIT)
+    status = Column(CaseInsensitiveEnum(DocStatus), nullable=False, default=DocStatus.DRAFT)
+    access_level = Column(CaseInsensitiveEnum(DocAccessLevel), nullable=False, default=DocAccessLevel.INHERIT)
     uploaded_by = Column(String(64), ForeignKey("users.user_id"), nullable=False)
     file_path = Column(String(500), nullable=False)
     word_count = Column(Integer, default=0)
@@ -63,6 +63,11 @@ class Document(Base):
 
     def archive(self) -> None:
         self.status = DocStatus.ARCHIVED
+
+    def restore(self) -> None:
+        """从归档恢复为草稿（需重新发布以触发向量化）"""
+        if self.status == DocStatus.ARCHIVED:
+            self.status = DocStatus.DRAFT
 
     def __repr__(self):
         return f"<Document {self.title} v{self.version}>"

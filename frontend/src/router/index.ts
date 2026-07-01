@@ -31,6 +31,16 @@ const router = createRouter({
           component: () => import('@/views/employee/ChatView.vue'),
         },
         {
+          path: 'interpretation',
+          name: 'employee-interpretation',
+          component: () => import('@/views/employee/InterpretationView.vue'),
+        },
+        {
+          path: 'benefits',
+          name: 'employee-benefits',
+          component: () => import('@/views/employee/BenefitsReportView.vue'),
+        },
+        {
           path: 'faq',
           name: 'employee-faq',
           component: () => import('@/views/employee/FaqView.vue'),
@@ -49,6 +59,12 @@ const router = createRouter({
           path: 'favorites',
           name: 'employee-favorites',
           component: () => import('@/views/employee/FavoritesView.vue'),
+        },
+        {
+          path: 'knowledge',
+          name: 'employee-knowledge',
+          component: () => import('@/views/employee/KnowledgeBaseView.vue'),
+          meta: { requiresHR: true },
         },
       ],
     },
@@ -93,11 +109,13 @@ const router = createRouter({
           path: 'users',
           name: 'admin-users',
           component: () => import('@/views/admin/UsersView.vue'),
+          meta: { adminOnly: true },
         },
         {
           path: 'audit',
           name: 'admin-audit',
           component: () => import('@/views/admin/AuditView.vue'),
+          meta: { adminOnly: true },
         },
       ],
     },
@@ -125,9 +143,19 @@ router.beforeEach((to, _from, next) => {
     return next()
   }
 
+  // HR专属功能（仅HR专员和admin可访问）
+  if (to.meta.requiresHR && !authStore.isHR) {
+    return next('/employee/search')
+  }
+
   // 需要管理员权限（HR专员和admin均可访问管理后台）
   if (to.meta.requiresAdmin && !authStore.isAdmin && !authStore.isHR) {
     return next('/employee/search')
+  }
+
+  // 仅系统管理员可访问（用户管理、审计日志等）
+  if (to.meta.adminOnly && !authStore.isAdmin) {
+    return next('/admin/dashboard')
   }
 
   next()

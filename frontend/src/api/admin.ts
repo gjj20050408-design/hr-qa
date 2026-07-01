@@ -16,11 +16,23 @@ export function updateDocument(id: string, data: any) {
 export function archiveDocument(id: string) {
   return request.delete(`/documents/${id}`)
 }
+export function restoreDocument(id: string) {
+  return request.post(`/documents/${id}/restore`)
+}
+export function deleteDocument(id: string) {
+  return request.delete(`/documents/${id}/permanent`)
+}
 export function getDocumentVersions(id: string) {
   return request.get(`/documents/${id}/versions`)
 }
 export function updateDocumentAccess(id: string, accessLevel: string) {
   return request.patch(`/documents/${id}/access`, { access_level: accessLevel })
+}
+export function publishDocument(id: string) {
+  return request.post(`/documents/${id}/publish`)
+}
+export function updateDocumentFile(id: string, data: FormData) {
+  return request.put(`/documents/${id}/file`, data, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
 // ── 分类管理 ──
@@ -74,6 +86,21 @@ export function getAnnouncementReads(id: string) {
 export function getUsers(params?: any) {
   return request.get('/users', { params })
 }
+export function updateUser(id: string, data: any) {
+  return request.put(`/users/${id}`, data)
+}
+export function deleteUser(id: string) {
+  return request.delete(`/users/${id}`)
+}
+export function unlockUser(id: string) {
+  return request.post(`/users/${id}/unlock`)
+}
+export function resetUserPassword(id: string) {
+  return request.post(`/users/${id}/reset-password`)
+}
+export function getDepartments() {
+  return request.get('/departments')
+}
 export function importEmployees(file: File) {
   const fd = new FormData()
   fd.append('file', file)
@@ -88,4 +115,12 @@ export function getAuditLogs(params?: any) {
 // ── 数据分析仪表盘 ──
 export function getDashboard(timeRange: string = '7d') {
   return request.get('/analytics/dashboard', { params: { time_range: timeRange } })
+}
+
+// ── 问答质量闭环：待优化问题 → FAQ 草稿 ──
+export function getFaqCandidates(limit: number = 10) {
+  return request.get('/insights/faq-candidates', { params: { limit } })
+}
+export function generateFaqDraft(question: string) {
+  return request.post('/insights/faq-draft', { question })
 }

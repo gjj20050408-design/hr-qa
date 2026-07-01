@@ -13,5 +13,5 @@ export function markAsRead(announcementId: string): Promise<ApiResponse<null>> {
 
 // 全部标记已读
 export function markAllRead(): Promise<ApiResponse<null>> {
-  return request.post('/announcements/mark-read', {}).then(res => res.data)
+  return request.post('/announcements/mark-all-read').then(res => res.data)
 }

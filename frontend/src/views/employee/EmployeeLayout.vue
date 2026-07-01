@@ -40,7 +40,7 @@
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-              <el-dropdown-item command="admin" v-if="authStore.isAdmin">管理后台</el-dropdown-item>
+              <el-dropdown-item command="admin" v-if="authStore.isAdmin || authStore.isHR">管理后台</el-dropdown-item>
               <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -64,20 +64,37 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getNotifications } from '@/api/notification'
-import { Document, Bell, ArrowDown } from '@element-plus/icons-vue'
+import { Document, Bell, ArrowDown, FolderOpened } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
-const tabs = [
+const baseTabs = [
   { key: 'search', label: '制度搜索', route: '/employee/search' },
   { key: 'chat', label: 'AI问答', route: '/employee/chat' },
+  { key: 'interpretation', label: '制度解读', route: '/employee/interpretation' },
+  { key: 'benefits', label: '我的权益', route: '/employee/benefits' },
   { key: 'faq', label: '常见问题', route: '/employee/faq' },
   { key: 'notifications', label: '通知消息', route: '/employee/notifications' },
   { key: 'history', label: '问答历史', route: '/employee/history' },
   { key: 'favorites', label: '我的收藏', route: '/employee/favorites' },
 ]
+
+// HR 角色可见的知识库管理 tab
+const hrTab = { key: 'knowledge', label: '知识库管理', route: '/employee/knowledge' }
+
+const tabs = computed(() => {
+  if (authStore.isHR) {
+    // 在"常见问题"前插入知识库管理（索引 4：search/chat/interpretation/benefits 之后）
+    return [
+      ...baseTabs.slice(0, 4),
+      hrTab,
+      ...baseTabs.slice(4),
+    ]
+  }
+  return baseTabs
+})
 
 const roleLabel = computed(() => {
   const roleMap: Record<string, string> = {
@@ -94,6 +111,15 @@ const currentView = computed(() => {
   return path
 })
 
+function navigate(key: string) {
+  const allTabs = [...baseTabs]
+  if (authStore.isHR) {
+    allTabs.splice(4, 0, hrTab)
+  }
+  const tab = allTabs.find(t => t.key === key)
+  if (tab) router.push(tab.route)
+}
+
 const unreadCount = ref(0)
 
 async function loadUnreadCount() {
@@ -105,11 +131,6 @@ async function loadUnreadCount() {
 }
 
 onMounted(loadUnreadCount)
-
-function navigate(key: string) {
-  const tab = tabs.find(t => t.key === key)
-  if (tab) router.push(tab.route)
-}
 
 function handleCommand(cmd: string) {
   if (cmd === 'logout') {

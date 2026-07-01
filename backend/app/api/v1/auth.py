@@ -1,4 +1,5 @@
 """认证接口路由 — /api/v1/auth/* 和 /api/v1/users/me/*"""
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -103,19 +104,32 @@ async def change_password(
 @router.get(f"{USER_PREFIX}")
 async def list_users(
     page: int = 1, page_size: int = 20,
+    keyword: Optional[str] = None,
     current_user=Depends(require_hr_plus),
     db: AsyncSession = Depends(get_db),
 ):
-    """管理员查看用户列表"""
+    """管理员查看用户列表（支持按工号/姓名搜索）"""
     from app.models.user import User
-    from sqlalchemy import select, func
+    from sqlalchemy import select, func, or_
+    from sqlalchemy.orm import selectinload
 
-    result = await db.execute(select(func.count(User.user_id)))
+    conditions = []
+    if keyword and keyword.strip():
+        kw = f"%{keyword.strip()}%"
+        conditions.append(or_(User.employee_id.ilike(kw), User.name.ilike(kw)))
+
+    count_query = select(func.count(User.user_id))
+    for c in conditions:
+        count_query = count_query.where(c)
+    result = await db.execute(count_query)
     total = result.scalar() or 0
 
-    result = await db.execute(
-        select(User).offset((page - 1) * page_size).limit(page_size)
-    )
+    # 预加载 department 关系，避免 mask_sensitive 触发异步懒加载报错
+    query = select(User).options(selectinload(User.department))
+    for c in conditions:
+        query = query.where(c)
+    query = query.order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
     users = result.scalars().all()
 
     return success_response(data={

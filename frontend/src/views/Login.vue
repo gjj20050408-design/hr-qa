@@ -77,7 +77,7 @@
           </el-form-item>
           <div class="form-extra">
             <el-checkbox v-model="loginForm.remember">记住我</el-checkbox>
-            <a href="#" class="forgot-link">忘记密码？</a>
+            <a href="#" class="forgot-link" @click.prevent="handleForgotPassword">忘记密码？</a>
           </div>
           <el-button
             type="primary"
@@ -159,7 +159,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock, Document, Check } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -224,6 +224,20 @@ async function handleLogin() {
       loading.value = false
     }
   })
+}
+
+function handleForgotPassword() {
+  ElMessageBox.alert(
+    '出于安全考虑，系统不支持自助重置密码。<br/>' +
+      '请联系<strong>系统管理员</strong>为您重置——重置后将恢复为默认密码 ' +
+      '<strong>Hr@123456</strong>，请登录后立即在「个人中心」修改。',
+    '忘记密码',
+    {
+      confirmButtonText: '我知道了',
+      dangerouslyUseHTMLString: true,
+      type: 'info',
+    },
+  )
 }
 
 async function handleRegister() {

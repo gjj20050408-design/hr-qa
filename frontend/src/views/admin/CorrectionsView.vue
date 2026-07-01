@@ -5,7 +5,7 @@
       <h3>纠错审核</h3>
       <el-radio-group v-model="statusFilter" size="default" @change="handleFilterChange">
         <el-radio-button value="pending">
-          <el-badge :value="pendingCount" :max="99" class="tab-badge">
+          <el-badge :value="pendingCount" :max="99" :hidden="pendingCount === 0" class="tab-badge">
             待审核
           </el-badge>
         </el-radio-button>

@@ -1,9 +1,9 @@
 """通知公告表 — Announcement, AnnouncementRead"""
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Text, Boolean, Enum, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, String, Integer, Text, Boolean, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from app.models.base import uuid4_str
+from app.models.base import uuid4_str, CaseInsensitiveEnum
 from app.enums.enums import Priority, TargetType
 
 
@@ -13,8 +13,8 @@ class Announcement(Base):
     announcement_id = Column(String(64), primary_key=True, default=uuid4_str)
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
-    priority = Column(Enum(Priority, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=Priority.NORMAL)
-    target_type = Column(Enum(TargetType, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=TargetType.ALL)
+    priority = Column(CaseInsensitiveEnum(Priority), nullable=False, default=Priority.NORMAL)
+    target_type = Column(CaseInsensitiveEnum(TargetType), nullable=False, default=TargetType.ALL)
     target_ids = Column(JSON, nullable=True)
     attachment = Column(String(500), nullable=True)
     published_by = Column(String(64), ForeignKey("users.user_id"), nullable=False)

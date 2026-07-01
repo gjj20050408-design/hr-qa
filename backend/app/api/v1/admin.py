@@ -15,9 +15,12 @@ from app.services.audit_service import AuditService
 from app.models.correction import CorrectionRequest
 from app.models.announcement import Announcement, AnnouncementRead
 from app.models.user import User
+from app.models.audit_log import AuditLog
 from app.models.base import uuid4_str
-from app.enums.enums import CorrectionStatus, Priority, TargetType, UserStatus
+from app.schemas.auth import UserUpdateRequest
+from app.enums.enums import CorrectionStatus, Priority, TargetType, UserStatus, Role
 from sqlalchemy import select, func, desc, or_
+from sqlalchemy.orm import selectinload
 
 router = APIRouter(tags=["管理后台"])
 
@@ -122,13 +125,36 @@ async def review_correction(
     cr.reviewed_at = datetime.now(timezone.utc)
     await db.flush()
 
-    # 审核后通知提交者（预留通知钩子，后续对接站内信/邮件服务）
-    # await NotificationService.notify_correction_result(
-    #     user_id=cr.submitted_by,
-    #     request_id=cr.request_id,
-    #     status=cr.status.value,
-    #     comment=cr.review_comment,
-    # )
+    # 审核完成后，通过站内通知告知提交者审核结果（批准/驳回均通知）
+    from app.models.document import Document
+    doc = await db.get(Document, cr.document_id)
+    doc_title = doc.title if doc else cr.document_id
+    if cr.status == CorrectionStatus.APPROVED:
+        notify_title = "您的纠错反馈已被批准"
+        notify_content = f"您针对制度文档《{doc_title}》「{cr.section}」提交的纠错反馈已被批准。"
+    else:
+        notify_title = "您的纠错反馈已被驳回"
+        notify_content = f"您针对制度文档《{doc_title}》「{cr.section}」提交的纠错反馈未被采纳。"
+    if cr.review_comment:
+        notify_content += f"\n审核意见：{cr.review_comment}"
+
+    notify = Announcement(
+        announcement_id=uuid4_str(),
+        title=notify_title,
+        content=notify_content,
+        priority=Priority.IMPORTANT,
+        target_type=TargetType.ROLE,
+        target_ids=[cr.submitted_by],
+        published_by=current_user.user_id,
+    )
+    db.add(notify)
+    db.add(AnnouncementRead(
+        read_id=uuid4_str(),
+        announcement_id=notify.announcement_id,
+        user_id=cr.submitted_by,
+        is_read=False,
+    ))
+    await db.flush()
 
     return success_response(data={
         "request_id": cr.request_id,
@@ -187,13 +213,25 @@ async def list_announcements(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """公告列表（支持按优先级筛选）"""
-    conditions = []
+    """公告列表（支持按优先级筛选）
+
+    可见性：仅返回当前用户拥有阅读记录（AnnouncementRead）的公告。
+    全员公告在发布时已为每个活跃用户建立阅读记录，定向通知（如纠错审核结果）
+    仅为目标用户建立记录，因此本接口天然只向对应用户展示其应见的公告。
+    """
+    conditions = [AnnouncementRead.user_id == current_user.user_id]
     if priority and priority in [p.value for p in Priority]:
         conditions.append(Announcement.priority == Priority(priority))
 
-    query = select(Announcement)
-    count_query = select(func.count(Announcement.announcement_id))
+    query = (
+        select(Announcement, AnnouncementRead.is_read)
+        .join(AnnouncementRead, AnnouncementRead.announcement_id == Announcement.announcement_id)
+        .options(selectinload(Announcement.publisher))
+    )
+    count_query = (
+        select(func.count(Announcement.announcement_id))
+        .join(AnnouncementRead, AnnouncementRead.announcement_id == Announcement.announcement_id)
+    )
     for c in conditions:
         query = query.where(c)
         count_query = count_query.where(c)
@@ -205,20 +243,7 @@ async def list_announcements(
 
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
-    anns = result.scalars().all()
-
-    # 批量查询当前用户的阅读状态
-    ann_ids = [a.announcement_id for a in anns]
-    read_status_map = {}
-    if ann_ids:
-        read_result = await db.execute(
-            select(AnnouncementRead).where(
-                AnnouncementRead.announcement_id.in_(ann_ids),
-                AnnouncementRead.user_id == current_user.user_id,
-            )
-        )
-        for r in read_result.scalars().all():
-            read_status_map[r.announcement_id] = r.is_read
+    rows = result.all()
 
     items = [
         {
@@ -231,9 +256,9 @@ async def list_announcements(
             "publisher_name": a.publisher.name if a.publisher else None,
             "published_at": str(a.published_at) if a.published_at else None,
             "attachment": a.attachment,
-            "is_read": read_status_map.get(a.announcement_id, False),
+            "is_read": bool(is_read),
         }
-        for a in anns
+        for a, is_read in rows
     ]
     return list_response(items=items, page=page, page_size=page_size, total=total)
 
@@ -292,18 +317,9 @@ async def mark_announcement_read(
             read_record.is_read = True
             read_record.read_at = datetime.now(timezone.utc)
     else:
-        # 如果公告存在但用户没有阅读记录，创建一条
-        ann = await db.get(Announcement, req.announcement_id)
-        if not ann:
-            raise HTTPException(status_code=404, detail=error_response(50002, "公告不存在"))
-        read_record = AnnouncementRead(
-            read_id=uuid4_str(),
-            announcement_id=req.announcement_id,
-            user_id=current_user.user_id,
-            is_read=True,
-            read_at=datetime.now(timezone.utc),
-        )
-        db.add(read_record)
+        # 没有阅读记录即表示该公告对当前用户不可见（如面向他人的定向通知），
+        # 不再补建记录，避免越权标记/暴露本不应可见的公告。
+        raise HTTPException(status_code=404, detail=error_response(50002, "公告不存在"))
 
     await db.flush()
     return success_response(data={
@@ -311,6 +327,34 @@ async def mark_announcement_read(
         "is_read": True,
         "read_at": str(read_record.read_at),
     }, message="已标记为已读")
+
+
+@router.post("/announcements/mark-all-read")
+async def mark_all_announcements_read(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """将当前用户的全部公告标记为已读"""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    # 仅标记当前用户已拥有阅读记录的公告。用户可见的公告（全员公告发布时、
+    # 定向通知创建时）均已建立阅读记录，因此无需为其补建记录——否则会把
+    # 面向他人的定向通知（如纠错审核结果）错误地暴露给当前用户。
+    result = await db.execute(
+        select(AnnouncementRead).where(
+            AnnouncementRead.user_id == current_user.user_id,
+            AnnouncementRead.is_read == False,
+        )
+    )
+    updated = 0
+    for r in result.scalars().all():
+        r.is_read = True
+        r.read_at = now
+        updated += 1
+
+    await db.flush()
+    return success_response(data={"updated": updated}, message="已全部标记为已读")
 
 
 @router.get("/announcements/{announcement_id}/reads")
@@ -343,14 +387,19 @@ async def get_announcement_reads(
 
     # 详细阅读记录
     detail_result = await db.execute(
-        select(AnnouncementRead).where(AnnouncementRead.announcement_id == announcement_id)
+        select(AnnouncementRead)
+        .options(selectinload(AnnouncementRead.user).selectinload(User.department))
+        .where(AnnouncementRead.announcement_id == announcement_id)
     )
     reads = detail_result.scalars().all()
     items = [
         {
             "read_id": r.read_id,
             "user_id": r.user_id,
+            "employee_id": r.user.employee_id if r.user else None,
+            "name": r.user.name if r.user else None,
             "user_name": r.user.name if r.user else None,
+            "department_name": (r.user.department.name if r.user and r.user.department else None),
             "is_read": r.is_read,
             "read_at": str(r.read_at) if r.read_at else None,
             "remind_count": r.remind_count,
@@ -412,6 +461,8 @@ async def get_audit_logs(
         {
             "log_id": l.log_id,
             "user_id": l.user_id,
+            "user_name": l.user.name if l.user else None,
+            "employee_id": l.user.employee_id if l.user else None,
             "action": l.action,
             "resource_type": l.resource_type,
             "resource_id": l.resource_id,
@@ -484,7 +535,7 @@ async def import_employees(
 
     success_count, fail_count = 0, 0
     failures = []
-    default_password = "Hr@123456"
+    default_password = DEFAULT_PASSWORD
 
     for idx, (_, row) in enumerate(df.iterrows()):
         eid = str(row.get(col_map['employee_id'], '')).strip()
@@ -541,3 +592,201 @@ async def import_employees(
         "fail": fail_count,
         "failures": failures[:20],
     }, message=f"导入完成: 成功{success_count}人, 失败{fail_count}人")
+
+
+# ── 用户管理（编辑 / 禁用） ──
+
+@router.get("/departments")
+async def list_departments(
+    current_user=Depends(require_hr_plus),
+    db: AsyncSession = Depends(get_db),
+):
+    """部门列表（用于用户编辑时选择部门）"""
+    from app.models.department import Department
+    result = await db.execute(
+        select(Department).order_by(Department.sort_order, Department.name)
+    )
+    departments = result.scalars().all()
+    return success_response(data={
+        "items": [
+            {"department_id": d.department_id, "name": d.name, "parent_id": d.parent_id}
+            for d in departments
+        ]
+    })
+
+
+@router.put("/users/{user_id}")
+async def update_user(
+    user_id: str,
+    req: UserUpdateRequest,
+    current_user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """修改用户信息（仅管理员）"""
+    result = await db.execute(
+        select(User).options(selectinload(User.department)).where(User.user_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail=error_response(90003, "用户不存在"))
+
+    # 禁止管理员修改自己的角色/状态，避免误操作把自己锁在门外
+    if user_id == current_user.user_id and (req.role is not None or req.status is not None):
+        raise HTTPException(status_code=400, detail=error_response(90001, "不能修改自己的角色或状态"))
+
+    # 校验部门存在
+    if req.department_id is not None:
+        from app.models.department import Department
+        dept = await db.get(Department, req.department_id)
+        if not dept:
+            raise HTTPException(status_code=400, detail=error_response(90001, "部门不存在"))
+        user.department_id = req.department_id
+
+    changed = {}
+    if req.name is not None:
+        user.name = req.name
+        changed["name"] = req.name
+    if req.email is not None:
+        user.email = req.email
+        changed["email"] = req.email
+    if req.phone is not None:
+        user.phone = req.phone
+        changed["phone"] = req.phone
+    if req.job_level is not None:
+        user.job_level = req.job_level
+        changed["job_level"] = req.job_level
+    if req.department_id is not None:
+        changed["department_id"] = req.department_id
+    if req.role is not None:
+        user.role = Role(req.role)
+        changed["role"] = req.role
+    if req.status is not None:
+        user.status = UserStatus(req.status)
+        changed["status"] = req.status
+
+    await db.flush()
+
+    db.add(AuditLog(
+        log_id=uuid4_str(), user_id=current_user.user_id,
+        action="user_update", resource_type="user", resource_id=user_id,
+        detail={"changed": changed},
+    ))
+    await db.flush()
+
+    # 重新加载 department 以正确脱敏返回
+    await db.refresh(user, attribute_names=["department"])
+    return success_response(data=user.mask_sensitive(), message="用户信息已更新")
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    current_user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """禁用用户（软删除 —— 置为 disabled，保留历史数据与审计追溯）"""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail=error_response(90003, "用户不存在"))
+    if user_id == current_user.user_id:
+        raise HTTPException(status_code=400, detail=error_response(90001, "不能禁用自己的账号"))
+    if user.status == UserStatus.DISABLED:
+        raise HTTPException(status_code=409, detail=error_response(90001, "该用户已被禁用"))
+
+    user.status = UserStatus.DISABLED
+    await db.flush()
+
+    db.add(AuditLog(
+        log_id=uuid4_str(), user_id=current_user.user_id,
+        action="user_disable", resource_type="user", resource_id=user_id,
+        detail={"employee_id": user.employee_id, "name": user.name},
+    ))
+    await db.flush()
+    return success_response(message="用户已禁用")
+
+
+# 员工账号导入及后续重置时使用的默认密码（与 import_employees 保持一致）
+DEFAULT_PASSWORD = "Hr@123456"
+
+
+@router.post("/users/{user_id}/unlock")
+async def unlock_user(
+    user_id: str,
+    current_user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """解锁用户（清除因连续登录失败导致的锁定，仅管理员）"""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail=error_response(90003, "用户不存在"))
+
+    user.reset_login_attempts()
+    await db.flush()
+
+    db.add(AuditLog(
+        log_id=uuid4_str(), user_id=current_user.user_id,
+        action="user_unlock", resource_type="user", resource_id=user_id,
+        detail={"employee_id": user.employee_id, "name": user.name},
+    ))
+    await db.flush()
+    return success_response(message="用户已解锁")
+
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: str,
+    current_user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """重置用户密码为默认密码，并解除锁定（仅管理员）"""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail=error_response(90003, "用户不存在"))
+
+    user.set_password(DEFAULT_PASSWORD)
+    # 重置密码时一并解除锁定，避免用户拿到新密码仍被锁在门外
+    user.reset_login_attempts()
+    await db.flush()
+
+    db.add(AuditLog(
+        log_id=uuid4_str(), user_id=current_user.user_id,
+        action="user_reset_password", resource_type="user", resource_id=user_id,
+        detail={"employee_id": user.employee_id, "name": user.name},
+    ))
+    await db.flush()
+    return success_response(
+        data={"default_password": DEFAULT_PASSWORD},
+        message="密码已重置为默认密码，请提醒用户尽快修改",
+    )
+
+
+# ── 问答质量闭环：待优化问题 → 生成 FAQ 草稿 ──
+
+@router.get("/insights/faq-candidates")
+async def get_faq_candidates(
+    limit: int = Query(10, ge=1, le=50),
+    current_user=Depends(require_hr_plus),
+    db: AsyncSession = Depends(get_db),
+):
+    """待优化问题列表：答不出或被评为无帮助的高频提问（HR/管理员）"""
+    from app.services.qa_insight_service import QAInsightService
+    candidates = await QAInsightService.get_faq_candidates(db_session=db, limit=limit)
+    return success_response(data={"items": candidates})
+
+
+@router.post("/insights/faq-draft")
+async def generate_faq_draft(
+    body: dict,
+    current_user=Depends(require_hr_plus),
+    db: AsyncSession = Depends(get_db),
+):
+    """根据一条待优化问题，用 LLM 生成 FAQ 草稿（不落库，供 HR 编辑后再发布）"""
+    from app.services.qa_insight_service import QAInsightService
+    question = (body or {}).get("question", "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail=error_response(90001, "问题不能为空"))
+
+    draft = await QAInsightService.generate_faq_draft(question=question, db_session=db)
+    if draft is None:
+        raise HTTPException(status_code=503, detail=error_response(90004, "LLM 服务暂不可用，无法生成草稿"))
+    return success_response(data=draft, message="草稿已生成，请审核后发布")

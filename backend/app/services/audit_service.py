@@ -1,6 +1,7 @@
 """审计日志服务"""
 from datetime import datetime
 from sqlalchemy import select, desc
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.audit_log import AuditLog
 
@@ -37,7 +38,7 @@ class AuditService:
             except ValueError:
                 pass
 
-        query = select(AuditLog)
+        query = select(AuditLog).options(selectinload(AuditLog.user))
         count_query = select(func.count(AuditLog.log_id))
         for c in conditions:
             query = query.where(c)

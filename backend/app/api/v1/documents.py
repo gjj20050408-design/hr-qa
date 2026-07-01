@@ -53,10 +53,8 @@ async def create_document(
                     content = f"[PDF文件: {file.filename}]"
             elif format == "word":
                 try:
-                    from io import BytesIO
-                    from docx import Document as DocxDoc
-                    doc = DocxDoc(BytesIO(file_content))
-                    content = "\n".join(p.text for p in doc.paragraphs)
+                    from app.providers.docx_parser import parse_docx_to_markdown
+                    content = parse_docx_to_markdown(file_content)
                 except Exception:
                     content = f"[Word文件: {file.filename}]"
             file_path = f"/uploads/{file.filename}"
@@ -285,6 +283,37 @@ async def archive_document(
         raise HTTPException(status_code=404, detail=error_response(30001, str(e)))
 
 
+@router.post(f"{DOC_PREFIX}/{{document_id}}/restore")
+async def restore_document(
+    document_id: str,
+    current_user=Depends(require_hr_plus),
+    db: AsyncSession = Depends(get_db),
+):
+    """恢复已归档文档（恢复为草稿，需重新发布以更新向量化）"""
+    try:
+        doc = await DocumentService.restore_document(document_id, current_user.user_id, db)
+        return success_response(
+            data={"document_id": doc.document_id, "status": doc.status.value},
+            message="文档已恢复为草稿，请重新发布以更新检索数据",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=error_response(30001, str(e)))
+
+
+@router.delete(f"{DOC_PREFIX}/{{document_id}}/permanent")
+async def delete_document(
+    document_id: str,
+    current_user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """彻底删除文档（物理删除，含版本/分块/向量索引，不可恢复，仅管理员）"""
+    try:
+        title = await DocumentService.delete_document(document_id, current_user.user_id, db)
+        return success_response(data={"document_id": document_id}, message=f"文档「{title}」已彻底删除")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=error_response(30001, str(e)))
+
+
 @router.get(f"{DOC_PREFIX}/{{document_id}}/versions")
 async def get_document_versions(
     document_id: str,
@@ -368,6 +397,84 @@ async def diff_document_versions(
         "summary": " / ".join(summary_parts),
         "diff": diff_lines,
     })
+
+
+@router.put(f"{DOC_PREFIX}/{{document_id}}/file")
+async def update_document_file(
+    document_id: str,
+    title: str = Form(None),
+    version_note: Optional[str] = Form(None),
+    file: UploadFile = File(...),
+    current_user=Depends(require_hr_plus),
+    db: AsyncSession = Depends(get_db),
+):
+    """上传新文件替换文档内容（版本号自动递增）"""
+    from app.models.document import Document
+
+    doc = await db.get(Document, document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail=error_response(30001, "文档不存在"))
+
+    try:
+        # 根据文件格式解析内容
+        file_content = await file.read()
+        content = ""
+        ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+
+        format_map = {"pdf": "pdf", "doc": "word", "docx": "word", "md": "markdown", "html": "html", "txt": "txt"}
+        fmt = format_map.get(ext, "markdown")
+
+        if fmt in ("markdown", "html", "txt"):
+            content = file_content.decode("utf-8", errors="ignore")
+        elif fmt == "pdf":
+            try:
+                from io import BytesIO
+                from PyPDF2 import PdfReader
+                reader = PdfReader(BytesIO(file_content))
+                content = "\n".join(page.extract_text() or "" for page in reader.pages)
+            except Exception:
+                content = f"[PDF文件: {file.filename}]"
+        elif fmt == "word":
+            try:
+                from app.providers.docx_parser import parse_docx_to_markdown
+                content = parse_docx_to_markdown(file_content)
+            except Exception:
+                content = f"[Word文件: {file.filename}]"
+
+        if not content.strip():
+            raise ValueError("文件内容为空，无法解析")
+
+        # 更新文档
+        updated = await DocumentService.update_document(
+            document_id=document_id,
+            db_session=db,
+            title=title,
+            content=content,
+            version_note=version_note or f"文件更新: {file.filename}",
+            changed_by=current_user.user_id,
+        )
+
+        # 如果文档之前已发布，重置为草稿状态以便重新向量化
+        from app.enums.enums import DocStatus
+        if updated.status == DocStatus.PUBLISHED:
+            from app.providers.vector_store import vector_store
+            vector_store.delete(document_id)
+
+        updated.status = DocStatus.DRAFT
+        updated.embedding_status = "pending"
+        updated.file_path = f"/uploads/{file.filename}"
+        await db.flush()
+
+        return success_response(data={
+            "document_id": updated.document_id,
+            "title": updated.title,
+            "version": updated.version,
+            "status": updated.status.value,
+            "word_count": updated.word_count,
+        }, message="文件已替换，请重新发布以更新向量化数据")
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=error_response(30002, str(e)))
 
 
 @router.patch(f"{DOC_PREFIX}/{{document_id}}/access")
