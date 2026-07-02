@@ -42,6 +42,7 @@ declare module 'vue' {
     MermaidChart: typeof import('./src/components/MermaidChart.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SliderCaptcha: typeof import('./src/components/SliderCaptcha.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

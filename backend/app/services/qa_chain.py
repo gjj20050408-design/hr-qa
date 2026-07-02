@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 
 import jieba
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, desc
 from sqlalchemy.dialects.mysql import match
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +38,7 @@ class QAContext:
     user_role: Role = Role.EMPLOYEE
     user_context: dict = field(default_factory=dict)
     session_id: str = ""
+    history: list = field(default_factory=list)   # 多轮追问：历史对话 messages
     answer: Optional[str] = None
     answer_type: Optional[AnswerType] = None
     reference_docs: list = field(default_factory=list)
@@ -254,7 +255,17 @@ class RAGHandler(QAHandler):
 
         try:
             # Step 1: 问题向量化（阿里云 text-embedding-v3）
-            query_embedding = embedding_provider.embed(ctx.processed_question)
+            # 多轮追问检索增强：纯追问（如"那病假呢"）向量化效果差，
+            # 拼接上一轮的用户问题后再检索（仅用于检索，不改变喂给 LLM 的 ctx.question）
+            retrieval_query = ctx.processed_question
+            if ctx.history:
+                last_user_q = next(
+                    (m["content"] for m in reversed(ctx.history) if m.get("role") == "user"),
+                    "",
+                )
+                if last_user_q:
+                    retrieval_query = f"{last_user_q} {ctx.processed_question}"
+            query_embedding = embedding_provider.embed(retrieval_query)
             if not query_embedding:
                 return await self.handle_next(ctx, db_session)
 
@@ -310,11 +321,19 @@ class RAGHandler(QAHandler):
             )
 
             # Step 5: 调用 DeepSeek 生成回答
+            # [临时调试] 确认多轮追问历史是否带入，验证后删除
+            logger.info(
+                f"[RAG-DEBUG] session={ctx.session_id[:8]} "
+                f"history_rounds={len(ctx.history) // 2} "
+                f"question={ctx.question!r} retrieval_query={retrieval_query!r}"
+            )
+
             llm_response = llm_provider.generate(
                 prompt=prompt,
                 system_prompt=self.RAG_SYSTEM_PROMPT,
                 max_tokens=2048,
                 temperature=0.3,
+                history=ctx.history,   # 多轮追问：携带历史对话
             )
 
             if not llm_response.content or llm_response.content.startswith("[LLM"):
@@ -784,9 +803,43 @@ class QAOrchestrator:
                 "department": user.department.name if user.department else "",
             },
             session_id=session_id,
+            history=await self._load_history(
+                session_id, user.user_id, db_session,
+                max_rounds=QA_THRESHOLDS.get("rag_history_max_rounds", 5),
+            ),
         )
         handler = self._chain or self.build_chain()
         return await handler.handle(ctx, db_session)
+
+    @staticmethod
+    async def _load_history(
+        session_id: str, user_id: str, db_session: AsyncSession, max_rounds: int = 5,
+    ) -> list:
+        """按 session_id 加载最近 max_rounds 轮历史对话，展开为 LLM messages。
+
+        当前问题此时尚未入库，因此只会取到"之前"的记录。跳过权限拒绝类回答
+        （以 🔒 开头），避免把拒绝话术当作上下文喂给模型。
+        """
+        if not session_id or max_rounds <= 0:
+            return []
+        from app.models.qa_record import QARecord
+        result = await db_session.execute(
+            select(QARecord)
+            .where(QARecord.session_id == session_id, QARecord.user_id == user_id)
+            .order_by(desc(QARecord.created_at))
+            .limit(max_rounds)
+        )
+        records = list(result.scalars().all())
+        records.reverse()  # 时间正序
+        messages = []
+        for r in records:
+            if not r.question or not r.answer:
+                continue
+            if r.answer.startswith("🔒"):  # 跳过权限拒绝话术
+                continue
+            messages.append({"role": "user", "content": r.question})
+            messages.append({"role": "assistant", "content": r.answer})
+        return messages
 
     @staticmethod
     def _preprocess(text: str) -> str:

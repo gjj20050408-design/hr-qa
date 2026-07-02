@@ -54,6 +54,7 @@ QA_THRESHOLDS = {
     "search_max_results": 20,
     "rag_top_k_retrieval": 10,
     "rag_top_n_prompt": 5,
+    "rag_history_max_rounds": 5,
     "rag_chunk_token_size": 500,
     "rag_high_confidence": 0.85,
     "rag_low_confidence": 0.70,

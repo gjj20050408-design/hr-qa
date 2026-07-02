@@ -17,7 +17,8 @@ class LLMResponse:
 class LLMProvider(Protocol):
     """大语言模型提供者接口"""
     def generate(self, prompt: str, system_prompt: str = "",
-                 max_tokens: int = 512, temperature: float = 0.7) -> LLMResponse:
+                 max_tokens: int = 512, temperature: float = 0.7,
+                 history: Optional[list] = None) -> LLMResponse:
         ...
     def health_check(self) -> bool:
         ...
@@ -26,7 +27,8 @@ class LLMProvider(Protocol):
 class NoOpLLMProvider:
     """一期空实现"""
     def generate(self, prompt: str, system_prompt: str = "",
-                 max_tokens: int = 512, temperature: float = 0.7) -> LLMResponse:
+                 max_tokens: int = 512, temperature: float = 0.7,
+                 history: Optional[list] = None) -> LLMResponse:
         return LLMResponse(content="", tokens_used=0, model="noop")
     def health_check(self) -> bool:
         return False
@@ -59,13 +61,14 @@ class CircuitBreakerLLMProvider:
         return True
 
     def generate(self, prompt: str, system_prompt: str = "",
-                 max_tokens: int = 512, temperature: float = 0.7) -> LLMResponse:
+                 max_tokens: int = 512, temperature: float = 0.7,
+                 history: Optional[list] = None) -> LLMResponse:
         if self.is_circuit_open:
             logger.warning("Circuit breaker OPEN: request rejected")
             return LLMResponse(content="[LLM 服务暂时不可用，已熔断]", model=self._inner.model)
 
         try:
-            response = self._inner.generate(prompt, system_prompt, max_tokens, temperature)
+            response = self._inner.generate(prompt, system_prompt, max_tokens, temperature, history)
             # 成功 → 重置
             self._failure_count = 0
             self._circuit_open = False
@@ -96,7 +99,8 @@ class OpenAILLMProvider:
         self._health_cache_ttl: float = 30
 
     def generate(self, prompt: str, system_prompt: str = "",
-                 max_tokens: int = 512, temperature: float = 0.7) -> LLMResponse:
+                 max_tokens: int = 512, temperature: float = 0.7,
+                 history: Optional[list] = None) -> LLMResponse:
         import openai
         client = openai.OpenAI(
             api_key=self.api_key,
@@ -107,6 +111,8 @@ class OpenAILLMProvider:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
+        if history:
+            messages.extend(history)          # 多轮追问：插入历史对话
         messages.append({"role": "user", "content": prompt})
         response = client.chat.completions.create(
             model=self.model,

@@ -75,6 +75,10 @@
               show-password
             />
           </el-form-item>
+          <!-- 人机验证 -->
+          <el-form-item>
+            <SliderCaptcha ref="captchaRef" @success="captchaPassed = true" @fail="captchaPassed = false" />
+          </el-form-item>
           <div class="form-extra">
             <el-checkbox v-model="loginForm.remember">记住我</el-checkbox>
             <a href="#" class="forgot-link" @click.prevent="handleForgotPassword">忘记密码？</a>
@@ -138,6 +142,10 @@
               show-password
             />
           </el-form-item>
+          <!-- 人机验证 -->
+          <el-form-item>
+            <SliderCaptcha ref="registerCaptchaRef" @success="registerCaptchaPassed = true" @fail="registerCaptchaPassed = false" />
+          </el-form-item>
           <el-button
             type="primary"
             size="large"
@@ -161,6 +169,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock, Document, Check } from '@element-plus/icons-vue'
+import SliderCaptcha from '@/components/SliderCaptcha.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -169,6 +178,12 @@ const activeTab = ref<'login' | 'register'>('login')
 const loading = ref(false)
 const loginFormRef = ref<FormInstance>()
 const registerFormRef = ref<FormInstance>()
+
+// 人机验证
+const captchaRef = ref<InstanceType<typeof SliderCaptcha>>()
+const captchaPassed = ref(false)
+const registerCaptchaRef = ref<InstanceType<typeof SliderCaptcha>>()
+const registerCaptchaPassed = ref(false)
 
 // 登录表单
 const loginForm = reactive({
@@ -210,6 +225,10 @@ async function handleLogin() {
   if (!loginFormRef.value) return
   await loginFormRef.value.validate(async (valid) => {
     if (!valid) return
+    if (!captchaPassed.value) {
+      ElMessage.warning('请先完成人机验证')
+      return
+    }
     loading.value = true
     try {
       await authStore.login({
@@ -220,6 +239,9 @@ async function handleLogin() {
       router.push(authStore.isAdmin ? '/admin' : '/employee')
     } catch {
       // error handled by interceptor
+      // 登录失败后重置验证，防止绕过
+      captchaPassed.value = false
+      captchaRef.value?.reset()
     } finally {
       loading.value = false
     }
@@ -244,6 +266,10 @@ async function handleRegister() {
   if (!registerFormRef.value) return
   await registerFormRef.value.validate(async (valid) => {
     if (!valid) return
+    if (!registerCaptchaPassed.value) {
+      ElMessage.warning('请先完成人机验证')
+      return
+    }
     loading.value = true
     try {
       await authStore.register({
@@ -258,6 +284,9 @@ async function handleRegister() {
       activeTab.value = 'login'
     } catch {
       // error handled by interceptor
+      // 注册失败后重置验证，防止绕过
+      registerCaptchaPassed.value = false
+      registerCaptchaRef.value?.reset()
     } finally {
       loading.value = false
     }
