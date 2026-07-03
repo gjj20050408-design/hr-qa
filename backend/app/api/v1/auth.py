@@ -1,6 +1,10 @@
 """认证接口路由 — /api/v1/auth/* 和 /api/v1/users/me/*"""
+import os
+import uuid
+from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request
+
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -16,6 +20,12 @@ router = APIRouter(tags=["认证与用户"])
 
 AUTH_PREFIX = "/auth"
 USER_PREFIX = "/users"
+
+# 头像上传配置
+AVATAR_UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads" / "avatars"
+AVATAR_URL_PREFIX = "/api/v1/uploads/avatars"  # 与 main.py 中静态挂载路径保持一致
+AVATAR_MAX_BYTES = 2 * 1024 * 1024  # 2MB
+AVATAR_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 
 @router.post(f"{AUTH_PREFIX}/register")
@@ -99,6 +109,78 @@ async def change_password(
         return success_response(message="密码修改成功")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=error_response(90001, str(e)))
+
+
+@router.post(f"{USER_PREFIX}/me/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """上传当前用户头像
+
+    - 允许格式：jpg / jpeg / png / webp / gif
+    - 大小上限：2MB
+    - 保存路径：backend/uploads/avatars/<user_id>_<uuid><ext>
+    - 返回可访问 URL（通过静态挂载 /api/v1/uploads/avatars 提供）
+    """
+    filename = file.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in AVATAR_ALLOWED_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail=error_response(90002, f"仅支持 {', '.join(sorted(AVATAR_ALLOWED_EXT))} 格式"),
+        )
+
+    # 读取时限制大小，避免超大文件占用内存
+    content = await file.read(AVATAR_MAX_BYTES + 1)
+    if len(content) > AVATAR_MAX_BYTES:
+        raise HTTPException(status_code=400, detail=error_response(90003, "文件大小不能超过 2MB"))
+
+    AVATAR_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 尝试删除该用户的旧头像文件，避免磁盘堆积（失败忽略即可）
+    old_url = current_user.avatar_url or ""
+    if old_url.startswith(AVATAR_URL_PREFIX):
+        old_path = AVATAR_UPLOAD_DIR / os.path.basename(old_url)
+        try:
+            if old_path.is_file():
+                old_path.unlink()
+        except OSError:
+            pass
+
+    new_name = f"{current_user.user_id}_{uuid.uuid4().hex}{ext}"
+    dest = AVATAR_UPLOAD_DIR / new_name
+    try:
+        with open(dest, "wb") as f:
+            f.write(content)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=error_response(90004, f"保存文件失败: {e}"))
+
+    avatar_url = f"{AVATAR_URL_PREFIX}/{new_name}"
+    current_user.avatar_url = avatar_url
+    await db.commit()
+
+    return success_response(data={"avatar_url": avatar_url}, message="头像更新成功")
+
+
+@router.delete(f"{USER_PREFIX}/me/avatar")
+async def delete_avatar(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """删除当前用户头像，恢复为默认字母头像"""
+    old_url = current_user.avatar_url or ""
+    if old_url.startswith(AVATAR_URL_PREFIX):
+        old_path = AVATAR_UPLOAD_DIR / os.path.basename(old_url)
+        try:
+            if old_path.is_file():
+                old_path.unlink()
+        except OSError:
+            pass
+    current_user.avatar_url = None
+    await db.commit()
+    return success_response(message="已恢复默认头像")
 
 
 @router.get(f"{USER_PREFIX}")

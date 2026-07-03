@@ -25,7 +25,7 @@
           </el-button>
         </el-badge>
         <div class="user-info">
-          <el-avatar :size="32" class="user-avatar">
+          <el-avatar :size="32" :src="authStore.user?.avatar_url || undefined" class="user-avatar">
             {{ authStore.user?.name?.charAt(0) }}
           </el-avatar>
           <div class="user-detail">
@@ -138,6 +138,8 @@ function handleCommand(cmd: string) {
     router.push('/login')
   } else if (cmd === 'admin') {
     router.push('/admin')
+  } else if (cmd === 'profile') {
+    router.push('/profile')
   }
 }
 </script>

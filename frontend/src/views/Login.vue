@@ -75,10 +75,6 @@
               show-password
             />
           </el-form-item>
-          <!-- 人机验证 -->
-          <el-form-item>
-            <SliderCaptcha ref="captchaRef" @success="captchaPassed = true" @fail="captchaPassed = false" />
-          </el-form-item>
           <div class="form-extra">
             <el-checkbox v-model="loginForm.remember">记住我</el-checkbox>
             <a href="#" class="forgot-link" @click.prevent="handleForgotPassword">忘记密码？</a>
@@ -142,10 +138,6 @@
               show-password
             />
           </el-form-item>
-          <!-- 人机验证 -->
-          <el-form-item>
-            <SliderCaptcha ref="registerCaptchaRef" @success="registerCaptchaPassed = true" @fail="registerCaptchaPassed = false" />
-          </el-form-item>
           <el-button
             type="primary"
             size="large"
@@ -160,11 +152,28 @@
 
       </div>
     </div>
+
+    <!-- 人机验证弹窗：点击登录/注册后弹出，通过后自动关闭并继续 -->
+    <el-dialog
+      v-model="captchaVisible"
+      title="人机验证"
+      width="360px"
+      align-center
+      :close-on-click-modal="false"
+      :close-on-press-escape="!captchaLoading"
+      :show-close="!captchaLoading"
+      @closed="onCaptchaClosed"
+    >
+      <div class="captcha-dialog-body">
+        <p class="captcha-tip">请拖动下方滑块，将拼图对齐缺口以完成验证</p>
+        <SliderCaptcha ref="captchaRef" @success="onCaptchaSuccess" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
@@ -179,11 +188,12 @@ const loading = ref(false)
 const loginFormRef = ref<FormInstance>()
 const registerFormRef = ref<FormInstance>()
 
-// 人机验证
+// 人机验证：点击登录/注册后弹窗，滑块通过才继续
 const captchaRef = ref<InstanceType<typeof SliderCaptcha>>()
-const captchaPassed = ref(false)
-const registerCaptchaRef = ref<InstanceType<typeof SliderCaptcha>>()
-const registerCaptchaPassed = ref(false)
+const captchaVisible = ref(false)
+const captchaLoading = ref(false)
+// 通过校验后要执行的动作（登录 / 注册）；弹窗关闭时会重置
+let pendingAction: null | (() => Promise<void>) = null
 
 // 登录表单
 const loginForm = reactive({
@@ -223,28 +233,22 @@ const registerRules: FormRules = {
 
 async function handleLogin() {
   if (!loginFormRef.value) return
-  await loginFormRef.value.validate(async (valid) => {
+  await loginFormRef.value.validate((valid) => {
     if (!valid) return
-    if (!captchaPassed.value) {
-      ElMessage.warning('请先完成人机验证')
-      return
-    }
-    loading.value = true
-    try {
-      await authStore.login({
-        account: loginForm.account,
-        password: loginForm.password,
-      })
-      ElMessage.success('登录成功')
-      router.push(authStore.isAdmin ? '/admin' : '/employee')
-    } catch {
-      // error handled by interceptor
-      // 登录失败后重置验证，防止绕过
-      captchaPassed.value = false
-      captchaRef.value?.reset()
-    } finally {
-      loading.value = false
-    }
+    // 表单通过 → 弹出滑块验证，验证通过后再真正登录
+    openCaptcha(async () => {
+      loading.value = true
+      try {
+        await authStore.login({
+          account: loginForm.account,
+          password: loginForm.password,
+        })
+        ElMessage.success('登录成功')
+        router.push(authStore.isAdmin ? '/admin' : '/employee')
+      } finally {
+        loading.value = false
+      }
+    })
   })
 }
 
@@ -264,33 +268,57 @@ function handleForgotPassword() {
 
 async function handleRegister() {
   if (!registerFormRef.value) return
-  await registerFormRef.value.validate(async (valid) => {
+  await registerFormRef.value.validate((valid) => {
     if (!valid) return
-    if (!registerCaptchaPassed.value) {
-      ElMessage.warning('请先完成人机验证')
-      return
-    }
-    loading.value = true
-    try {
-      await authStore.register({
-        employee_id: registerForm.employee_id,
-        name: registerForm.name,
-        department_id: registerForm.department_id,
-        email: registerForm.email || undefined,
-        phone: registerForm.phone || undefined,
-        password: registerForm.password,
-      })
-      ElMessage.success('注册成功，请登录')
-      activeTab.value = 'login'
-    } catch {
-      // error handled by interceptor
-      // 注册失败后重置验证，防止绕过
-      registerCaptchaPassed.value = false
-      registerCaptchaRef.value?.reset()
-    } finally {
-      loading.value = false
-    }
+    // 表单通过 → 弹出滑块验证，验证通过后再真正注册
+    openCaptcha(async () => {
+      loading.value = true
+      try {
+        await authStore.register({
+          employee_id: registerForm.employee_id,
+          name: registerForm.name,
+          department_id: registerForm.department_id,
+          email: registerForm.email || undefined,
+          phone: registerForm.phone || undefined,
+          password: registerForm.password,
+        })
+        ElMessage.success('注册成功，请登录')
+        activeTab.value = 'login'
+      } finally {
+        loading.value = false
+      }
+    })
   })
+}
+
+// 打开验证弹窗，登录/注册的实际动作作为 action 传入，等滑块通过后再执行
+function openCaptcha(action: () => Promise<void>) {
+  pendingAction = action
+  captchaVisible.value = true
+  // 弹窗打开后重置滑块状态，防止上一次的通过态残留
+  nextTick(() => captchaRef.value?.reset())
+}
+
+// 滑块校验通过：延迟一小会儿让用户看到"验证通过"提示，再关弹窗执行动作
+async function onCaptchaSuccess() {
+  captchaLoading.value = true
+  const action = pendingAction
+  pendingAction = null
+  await new Promise((r) => setTimeout(r, 300))
+  captchaVisible.value = false
+  captchaLoading.value = false
+  if (!action) return
+  try {
+    await action()
+  } catch {
+    // 请求错误已由拦截器统一提示，这里只吞掉即可
+  }
+}
+
+// 弹窗被用户关闭（点 X / ESC）时，清空未完成动作，避免下次误触发
+function onCaptchaClosed() {
+  pendingAction = null
+  captchaLoading.value = false
 }
 </script>
 
@@ -491,4 +519,17 @@ async function handleRegister() {
 }
 
 .w-full { width: 100%; }
+
+.captcha-dialog-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.captcha-tip {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+  text-align: center;
+}
 </style>

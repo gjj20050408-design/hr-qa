@@ -25,3 +25,22 @@ export function refreshToken(token: string): Promise<ApiResponse<{ access_token:
 export function logout(): Promise<ApiResponse<null>> {
   return request.post('/auth/logout').then(res => res.data)
 }
+
+// 修改密码
+export function changePassword(data: { old_password: string; new_password: string }): Promise<ApiResponse<null>> {
+  return request.put('/users/me/password', data).then(res => res.data)
+}
+
+// 上传头像
+export function uploadAvatar(file: File): Promise<ApiResponse<{ avatar_url: string }>> {
+  const form = new FormData()
+  form.append('file', file)
+  return request
+    .post('/users/me/avatar', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+    .then(res => res.data)
+}
+
+// 删除头像 → 恢复默认字母头像
+export function deleteAvatar(): Promise<ApiResponse<null>> {
+  return request.delete('/users/me/avatar').then(res => res.data)
+}

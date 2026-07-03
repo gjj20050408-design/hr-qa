@@ -119,6 +119,12 @@ const router = createRouter({
         },
       ],
     },
+    // 个人中心（员工端与管理后台共用，需登录）
+    {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('@/views/ProfileView.vue'),
+    },
   ],
 })
 

@@ -238,18 +238,26 @@ function onEnd() {
   window.removeEventListener('touchmove', onMove)
   window.removeEventListener('mouseup', onEnd)
   window.removeEventListener('touchend', onEnd)
+  // 松开即校验一次（在弹窗里使用时，通过后由外部关闭弹窗继续流程）
+  verify()
+}
 
+// 外部调用：校验当前拼图位置是否对齐缺口
+// 返回 true 表示通过（此后再次调用直接返回 true）；false 表示未通过，会短暂显示失败态后重置
+function verify(): boolean {
+  if (verified) return true
   // 拼图块形状绘制在留白 pad 处，故对齐条件为 pieceLeft + pad ≈ targetX
   if (Math.abs(pieceLeft.value + pad - targetX) <= tolerance) {
     status.value = 'success'
     verified = true
     fillComplete()
     emit('success')
-  } else {
-    status.value = 'fail'
-    emit('fail')
-    setTimeout(() => reset(true), 800)
+    return true
   }
+  status.value = 'fail'
+  emit('fail')
+  setTimeout(() => reset(true), 800)
+  return false
 }
 
 // 验证通过：把拼图块吸附到精确位置，并将缺口填充回完整原图
@@ -269,8 +277,8 @@ function getClientX(e: MouseEvent | TouchEvent): number {
   return e instanceof TouchEvent ? e.touches[0]?.clientX ?? e.changedTouches[0].clientX : e.clientX
 }
 
-// 供父组件调用：重置验证状态
-defineExpose({ reset: () => reset(true) })
+// 供父组件调用：重置验证状态 / 主动触发校验
+defineExpose({ reset: () => reset(true), verify })
 
 onMounted(() => reset(true))
 onBeforeUnmount(() => {

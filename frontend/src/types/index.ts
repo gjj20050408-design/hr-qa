@@ -20,6 +20,7 @@ export interface UserInfo {
   hire_date: string
   work_location: string
   status: 'active' | 'disabled'
+  avatar_url?: string | null
 }
 
 // 登录请求

@@ -68,13 +68,22 @@
     <main class="admin-main">
       <header class="admin-header">
         <h2>{{ pageTitle }}</h2>
-        <div class="header-user">
-          <el-avatar :size="28" class="admin-avatar">
-            {{ authStore.user?.name?.charAt(0) || '管' }}
-          </el-avatar>
-          <span>{{ authStore.user?.name || '管理员' }}</span>
-          <span class="header-role-tag">{{ roleLabel }}</span>
-        </div>
+        <el-dropdown trigger="click" @command="onUserCommand">
+          <div class="header-user">
+            <el-avatar :size="28" :src="authStore.user?.avatar_url || undefined" class="admin-avatar">
+              {{ authStore.user?.name?.charAt(0) || '管' }}
+            </el-avatar>
+            <span>{{ authStore.user?.name || '管理员' }}</span>
+            <span class="header-role-tag">{{ roleLabel }}</span>
+            <el-icon class="header-caret"><ArrowDown /></el-icon>
+          </div>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="profile" :icon="User">个人中心</el-dropdown-item>
+              <el-dropdown-item divided command="logout" :icon="SwitchButton">退出登录</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </header>
 
       <div class="admin-content">
@@ -86,15 +95,18 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { getCorrections } from '@/api/admin'
 import {
   Document, Back, Grid, Files, QuestionFilled,
-  CircleCheck, Lock, Bell, User, List
+  CircleCheck, Lock, Bell, User, List,
+  ArrowDown, SwitchButton
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 
 const pendingCorrections = ref(0)
@@ -161,6 +173,31 @@ async function loadPendingCorrections() {
 }
 
 onMounted(loadPendingCorrections)
+
+// 顶部用户下拉菜单命令
+async function onUserCommand(command: string) {
+  if (command === 'profile') {
+    router.push('/profile')
+    return
+  }
+  if (command === 'logout') {
+    try {
+      await ElMessageBox.confirm('确认退出登录？', '提示', {
+        confirmButtonText: '退出',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
+    } catch {
+      return // 用户取消
+    }
+    try {
+      await authStore.logout()
+    } finally {
+      ElMessage.success('已退出登录')
+      router.replace('/login')
+    }
+  }
+}
 </script>
 
 <style scoped>
@@ -312,6 +349,17 @@ onMounted(loadPendingCorrections)
   gap: 8px;
   font-size: 14px;
   color: #475569;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.header-user:hover {
+  background: var(--surface-muted, #f1f5f9);
+}
+.header-caret {
+  font-size: 12px;
+  color: #94a3b8;
 }
 .admin-avatar {
   background: var(--primary) !important;

@@ -5,8 +5,11 @@ import socket
 import subprocess
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
@@ -167,6 +170,26 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables auto-created")
 
+        # 老库补字段：create_all 不会向已存在的表添加新列
+        # 先检查列是否存在，不存在才执行 ALTER TABLE（兼容老版本 MySQL）
+        try:
+            async with engine.connect() as conn:
+                result = await conn.execute(text(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                    "WHERE TABLE_SCHEMA = :db AND TABLE_NAME = 'users' AND COLUMN_NAME = 'avatar_url'"
+                ), {"db": settings.DB_NAME})
+                exists = result.scalar() or 0
+
+            if exists == 0:
+                logger.info("Adding users.avatar_url column...")
+                async with engine.begin() as conn:
+                    await conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url VARCHAR(255) NULL"))
+                logger.info("users.avatar_url column added")
+            else:
+                logger.info("users.avatar_url already exists, skipping migration")
+        except Exception as e:
+            logger.warning(f"users.avatar_url auto-migration failed: {e}")
+
         # 自动执行种子数据（部门、分类、默认管理员）
         seed_file = os.path.join(os.path.dirname(__file__), "..", "init_db.sql")
         if os.path.exists(seed_file):
@@ -284,6 +307,14 @@ app.include_router(qa_router, prefix=api_v1_prefix)
 app.include_router(admin_router, prefix=api_v1_prefix)
 app.include_router(faqs_router, prefix=api_v1_prefix)
 app.include_router(insights_router, prefix=api_v1_prefix)
+
+# ── 上传文件静态目录（头像等）──
+# 目录路径：backend/uploads，通过 /api/v1/uploads/* 对外访问；
+# 前端 Vite dev 只代理 /api，所以要挂在 /api 前缀下才不跨域。
+UPLOADS_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+(UPLOADS_DIR / "avatars").mkdir(parents=True, exist_ok=True)
+app.mount(f"{api_v1_prefix}/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 
 @app.get("/")

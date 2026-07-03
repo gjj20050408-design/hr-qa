@@ -26,6 +26,7 @@ class User(Base):
     hire_date = Column(Date, nullable=False)
     work_location = Column(String(50), nullable=True)
     marital_status = Column(CaseInsensitiveEnum(MaritalStatus), nullable=True)
+    avatar_url = Column(String(255), nullable=True)
     status = Column(CaseInsensitiveEnum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
     login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
@@ -73,6 +74,7 @@ class User(Base):
             "hire_date": str(self.hire_date) if self.hire_date else None,
             "work_location": self.work_location,
             "marital_status": self.marital_status.value if self.marital_status else None,
+            "avatar_url": self.avatar_url,
             "status": self.status.value if self.status else None,
             "locked": bool(self.locked_until and datetime.now(timezone.utc) < self.locked_until),
             "locked_until": self.locked_until.isoformat() if self.locked_until else None,

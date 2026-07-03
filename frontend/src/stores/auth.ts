@@ -79,6 +79,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // 更新头像 URL（上传/删除后调用），保持 store 与 localStorage 一致
+  function setAvatar(avatarUrl: string | null) {
+    if (!user.value) return
+    user.value = { ...user.value, avatar_url: avatarUrl }
+    localStorage.setItem('user_info', JSON.stringify(user.value))
+  }
+
   return {
     user,
     accessToken,
@@ -92,5 +99,6 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     clearAuth,
     restoreUser,
+    setAvatar,
   }
 })
